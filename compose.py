@@ -60,6 +60,9 @@ def main():
     p.add_argument("--captions", action=argparse.BooleanOptionalAction, default=True)
     p.add_argument("--whisper-model", default="small")
     p.add_argument("--language", default=None)
+    p.add_argument("--start", type=float, default=None, help="cut: start second in the input")
+    p.add_argument("--end", type=float, default=None, help="cut: end second in the input")
+    p.add_argument("--words-json", default=None, help="reuse an existing transcript instead of running Whisper")
     a = p.parse_args()
 
     bw_src, bh_src = probe_size(a.banner)
@@ -67,11 +70,18 @@ def main():
     bh = round(bw * bh_src / bw_src)
     banner_y = H - a.banner_bottom - bh
     ass = None
-    print(f"DURATION {probe_duration(a.input)}", flush=True)
+    cut = a.start is not None and a.end is not None
+    dur = (a.end - a.start) if cut else probe_duration(a.input)
+    print(f"DURATION {dur}", flush=True)
     if a.captions:
-        print("STAGE transcribing", flush=True)
         import captions
-        words, lang = captions.transcribe_words(a.input, a.whisper_model, a.language)
+        if a.words_json:
+            words, lang = captions.load_words(a.words_json)
+            if cut:
+                words = captions.window(words, a.start, a.end)
+        else:
+            print("STAGE transcribing", flush=True)
+            words, lang = captions.transcribe_words(a.input, a.whisper_model, a.language)
         if words:
             ass = str(Path(a.output).with_suffix(".ass"))
             n = captions.write_ass(words, ass, W, H, bottom_y=banner_y - 40)
@@ -80,6 +90,7 @@ def main():
             print("captions: no speech detected", file=sys.stderr)
     print("STAGE rendering", flush=True)
     cmd = [FFMPEG, "-y", "-hide_banner", "-loglevel", "error", "-progress", "pipe:1", "-nostats",
+           *(["-ss", f"{a.start:.3f}", "-t", f"{dur:.3f}"] if cut else []),
            "-i", a.input, "-stream_loop", "-1", "-i", a.banner,
            "-filter_complex", build_filter(a.layout, bw, banner_y, a.video_center_y, ass),
            "-map", "[v]", "-map", "0:a?", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",

@@ -79,6 +79,20 @@
 </div>
 
 <div class="row">
+  <label>mode</label>
+  <label class="opt"><input type="radio" name="mode" value="whole" checked> whole video</label>
+  <label class="opt"><input type="radio" name="mode" value="clips"> find clips</label>
+</div>
+
+<div class="row" id="clipopts" style="display:none">
+  <label>clips</label>
+  <span>first <input type="text" id="limit" value="" placeholder="all" style="flex:none;min-width:0;width:48px"> min</span>
+  <span>max <input type="text" id="nclips" value="5" style="flex:none;min-width:0;width:34px"> clips</span>
+  <span>length <input type="text" id="minlen" value="15" style="flex:none;min-width:0;width:34px">-<input type="text" id="maxlen" value="60" style="flex:none;min-width:0;width:34px"> s</span>
+  <span>desc lang <input type="text" id="dlang" placeholder="same as video" style="flex:none;min-width:0;width:120px"></span>
+</div>
+
+<div class="row">
   <label>captions</label>
   <label class="opt"><input type="checkbox" id="caps" checked> on</label>
   <select id="model">
@@ -89,7 +103,7 @@
 </div>
 
 <div class="row"><span style="width:78px"></span><button class="go" id="run">run &gt;</button><span id="msg" class="err"></span></div>
-<div class="dim" style="margin-top:14px">whole-video mode. long videos: highlight finder is off (needs an api key).</div>
+<div class="dim" style="margin-top:14px" id="modehint">whole video: no AI, no cost.</div>
 
 <hr>
 <div class="row" style="margin-top:0"><span class="dim">jobs</span><button id="clear" type="button">clear all</button><span id="usage" class="dim"></span></div>
@@ -131,6 +145,13 @@ $('bfile').onchange = async e => {
   e.target.value = '';
 };
 
+// mode toggle
+document.querySelectorAll('input[name=mode]').forEach(r => r.onchange = () => {
+  const clips = document.querySelector('input[name=mode]:checked').value === 'clips';
+  $('clipopts').style.display = clips ? '' : 'none';
+  $('modehint').textContent = clips ? 'find clips: whisper + claude pick the best moments and write descriptions (a few cents per video).' : 'whole video: no AI, no cost.';
+});
+
 // run
 $('run').onclick = async () => {
   $('msg').textContent = '';
@@ -145,6 +166,13 @@ $('run').onclick = async () => {
   fd.append('captions', $('caps').checked ? 'true' : 'false');
   fd.append('model', $('model').value);
   fd.append('language', $('lang').value);
+  const mode = document.querySelector('input[name=mode]:checked').value;
+  fd.append('mode', mode);
+  if (mode === 'clips') {
+    fd.append('limit_min', $('limit').value || '0'); fd.append('max_clips', $('nclips').value || '5');
+    fd.append('min_len', $('minlen').value || '15'); fd.append('max_len', $('maxlen').value || '60');
+    fd.append('desc_lang', $('dlang').value);
+  }
   $('run').disabled = true;
   try {
     const r = await fetch('/api/jobs', { method: 'POST', body: fd });
@@ -182,18 +210,31 @@ function render(list) {
       e.root.className = 'job';
       e.t = document.createElement('div'); e.t.className = 't';
       e.s = document.createElement('div');
+      e.n = document.createElement('div'); e.n.className = 'log';
       e.l = document.createElement('div'); e.l.className = 'log';
       e.v = document.createElement('div');
-      e.root.append(e.t, e.s, e.l, e.v);
+      e.root.append(e.t, e.s, e.n, e.l, e.v);
       box.appendChild(e.root);
     }
     e.t.textContent = '> ' + j.title;
+    e.n.textContent = j.note || '';
     if (j.status === 'done') {
       e.s.className = 'bar'; e.s.textContent = bar(100) + ' done';
       if (!e.v.firstChild) {
-        const v = document.createElement('video'); v.controls = true; v.src = '/out/' + j.output; v.preload = 'metadata';
-        const a = document.createElement('a'); a.href = '/out/' + j.output + '?dl=1'; a.textContent = 'download ' + j.output;
-        e.v.append(v, a);
+        for (const o of j.outputs) {
+          const box = document.createElement('div'); box.style.margin = '12px 0 18px';
+          if (o.title) { const t = document.createElement('div'); t.style.color = 'var(--acc)'; t.textContent = '# ' + o.title + (o.start !== undefined ? '  (' + o.start + 's-' + o.end + 's)' : ''); box.append(t); }
+          const v = document.createElement('video'); v.controls = true; v.src = '/out/' + o.file; v.preload = 'metadata';
+          const a = document.createElement('a'); a.href = '/out/' + o.file + '?dl=1'; a.textContent = 'download ' + o.file;
+          box.append(v, a);
+          if (o.description) {
+            const d = document.createElement('div'); d.style.cssText = 'margin-top:6px;white-space:pre-wrap'; d.textContent = o.description;
+            const c = document.createElement('button'); c.textContent = 'copy description'; c.style.marginTop = '4px';
+            c.onclick = async () => { try { await navigator.clipboard.writeText(o.description); c.textContent = 'copied'; } catch (_) { c.textContent = 'select + copy manually'; } setTimeout(() => c.textContent = 'copy description', 1500); };
+            box.append(d, c);
+          }
+          e.v.append(box);
+        }
       }
       e.l.textContent = '';
     } else if (j.status === 'error') {

@@ -1,5 +1,5 @@
 """Tiny local web UI: paste a link or drop a file -> 9:16 clip with blurred fill, captions and looping banner."""
-import re, shutil, subprocess, sys, threading, queue, time, uuid
+import json, re, shutil, subprocess, sys, threading, queue, time, uuid
 from pathlib import Path
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
@@ -44,6 +44,7 @@ def run_job(jid):
             job["stage"], job["pct"] = "downloading", 0
             cmd = [sys.executable, "-m", "yt_dlp", "--no-playlist", "--newline", "--ffmpeg-location", _ffmpeg_dir(),
                    "-f", "bv*[height<=1080]+ba/b", "--merge-output-format", "mp4",
+                   *(["--download-sections", f"*0-{int(o['limit_min'] * 60)}"] if o.get("limit_min") else []),
                    "-o", str(wd / "source.%(ext)s"), o["url"]]
             p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=ENV)
             for line in p.stdout:
@@ -52,18 +53,30 @@ def run_job(jid):
                 else: log(job, line)
             if p.wait() != 0 or not src.exists():
                 raise RuntimeError("download failed")
-        out = wd / "out.mp4"
-        cmd = [sys.executable, str(HERE / "compose.py"), str(src), str(BANNERS / o["banner"]), str(out),
-               "--layout", o["layout"], "--whisper-model", o["model"]]
-        cmd.append("--captions" if o["captions"] else "--no-captions")
+        if o["mode"] == "clips":
+            cmd = [sys.executable, str(HERE / "findclips.py"), str(src), str(BANNERS / o["banner"]), str(wd / "clips"),
+                   "--layout", o["layout"], "--whisper-model", o["model"], "--max-clips", str(o["max_clips"]),
+                   "--min-len", str(o["min_len"]), "--max-len", str(o["max_len"]), "--desc-lang", o["desc_lang"],
+                   "--captions" if o["captions"] else "--no-captions"]
+            if o.get("limit_min"): cmd += ["--limit-sec", str(int(o["limit_min"] * 60))]
+        else:
+            cmd = [sys.executable, str(HERE / "compose.py"), str(src), str(BANNERS / o["banner"]), str(wd / "out.mp4"),
+                   "--layout", o["layout"], "--whisper-model", o["model"],
+                   "--captions" if o["captions"] else "--no-captions"]
         if o.get("language"): cmd += ["--language", o["language"]]
-        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=ENV)
         dur = 0.0
         job["stage"], job["pct"] = "starting", 0
         for line in p.stdout:
             line = line.strip()
             if line.startswith("DURATION "): dur = float(line.split()[1])
             elif line.startswith("STAGE "): job["stage"], job["pct"] = line[6:], 0
+            elif line.startswith("PCT "): job["pct"] = float(line[4:])
+            elif line.startswith("NOTE "): job["note"] = (job["note"] + "\n" + line[5:]).strip()
+            elif line.startswith("CLIP "):
+                c = json.loads(line[5:]); final = f"{jid}_{len(job['outputs']) + 1}.mp4"
+                shutil.move(c["file"], OUTPUT / final)
+                job["outputs"].append({**c, "file": final})
             elif line.startswith("out_time_us=") and dur:
                 try: job["pct"] = min(99.0, int(line.split("=")[1]) / 1e6 / dur * 100)
                 except ValueError: pass
@@ -71,11 +84,15 @@ def run_job(jid):
                                                          "dup_frames", "drop_frames", "speed", "progress"):
                 pass
             elif not re.search(r"warn|tip:", line, re.I): log(job, line)
-        if p.wait() != 0 or not out.exists():
-            raise RuntimeError("render failed")
-        final = f"{jid}.mp4"
-        shutil.move(str(out), OUTPUT / final)
-        job.update(status="done", stage="done", pct=100, output=final)
+        if p.wait() != 0:
+            raise RuntimeError("clip finder failed" if o["mode"] == "clips" else "render failed")
+        if o["mode"] != "clips":
+            out = wd / "out.mp4"
+            if not out.exists(): raise RuntimeError("render failed")
+            final = f"{jid}.mp4"; shutil.move(str(out), OUTPUT / final)
+            job["outputs"].append({"file": final, "title": "", "description": ""})
+        if not job["outputs"]: raise RuntimeError("no clips produced")
+        job.update(status="done", stage="done", pct=100)
     except Exception as e:
         job.update(status="error", stage="error")
         log(job, f"error: {e}")
@@ -106,12 +123,17 @@ async def upload_banner(file: UploadFile = File(...)):
 @app.post("/api/jobs")
 async def create_job(url: str = Form(""), banner: str = Form(...), layout: str = Form("blur"),
                      captions: bool = Form(True), model: str = Form("small"), language: str = Form(""),
+                     mode: str = Form("whole"), limit_min: float = Form(0), max_clips: int = Form(5),
+                     min_len: float = Form(15), max_len: float = Form(60), desc_lang: str = Form(""),
                      file: UploadFile | None = File(None)):
+    if mode not in ("whole", "clips"): raise HTTPException(400, "bad mode")
     if layout not in ("blur", "crop", "fit"): raise HTTPException(400, "bad layout")
     if model not in ("tiny", "base", "small", "medium"): raise HTTPException(400, "bad model")
     if not (BANNERS / Path(banner).name).exists(): raise HTTPException(400, "banner not found")
     jid = uuid.uuid4().hex[:8]
-    opts = dict(banner=Path(banner).name, layout=layout, captions=captions, model=model, language=language.strip())
+    opts = dict(banner=Path(banner).name, layout=layout, captions=captions, model=model, language=language.strip(),
+                mode=mode, limit_min=max(0.0, min(limit_min, 600.0)), max_clips=max(1, min(max_clips, 10)),
+                min_len=max(5.0, min(min_len, 180.0)), max_len=max(10.0, min(max_len, 180.0)), desc_lang=desc_lang.strip()[:40])
     if file is not None and file.filename:
         wd = JOBS_DIR / jid; wd.mkdir(exist_ok=True)
         dest = wd / safe_name(file.filename)
@@ -121,7 +143,7 @@ async def create_job(url: str = Form(""), banner: str = Form(...), layout: str =
         opts["url"] = url.strip(); title = url.strip()
     else:
         raise HTTPException(400, "give a http(s) link or a file")
-    jobs[jid] = dict(id=jid, title=title, status="queued", stage="queued", pct=0, log=[], output=None, opts=opts, t=time.time())
+    jobs[jid] = dict(id=jid, title=title, status="queued", stage="queued", pct=0, log=[], note="", outputs=[], opts=opts, t=time.time())
     order.insert(0, jid); q.put(jid)
     return {"id": jid}
 

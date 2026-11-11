@@ -6,8 +6,9 @@ looping banner overlay). Jobs run one at a time in a worker thread; state is in 
 
 ## Setup / run
 - `./setup.sh` then `./start.command` (serves http://127.0.0.1:8765). Server must stay bound to 127.0.0.1.
-- No API key is needed. If an LLM is added later, store keys in the OS keychain; **never ask the user to paste secrets in chat**
-  (if they do, tell them to revoke the key).
+- Whole-video mode needs no API key. "Find clips" mode needs an Anthropic key: `llm.get_key()` reads `ANTHROPIC_API_KEY`, then the
+  OS keychain (service `memeclip`, set with `python setkey.py`, or `autoclip` if AutoClip was used). **Never ask the user to paste secrets
+  in chat** (if they do, tell them to revoke the key). Claude Code can't type keys for the user.
 
 ## Gotchas (all hit in real use)
 - **ffmpeg needs libass** or captions are silently skipped. macOS: `brew install ffmpeg-full` (not `ffmpeg`).
@@ -25,5 +26,11 @@ captions bottom at `banner_y - 40`. Change via `compose.py` flags `--banner-scal
 ## Don't commit
 `banners/*.mp4`, `output/`, `jobs/`, `samples/`, `tools/`, `.venv/` (see `.gitignore`). Banners are the user's own branded assets.
 
+## Find-clips pipeline (`findclips.py`)
+ffmpeg audio extract (optionally first N sec) -> faster-whisper words (`words.json`) -> sentences -> `llm.pick_clips` (one Claude call, tool
+`submit_clips`: sentence-id ranges + title + description) -> validate length/overlap -> `compose.py --start --end --words-json` per clip.
+Subprocess protocol on stdout: `STAGE x`, `PCT n`, `NOTE text`, `CLIP {json}` (parsed by `app.py`). `yt-dlp --download-sections "*0-SEC"`
+fetches only the first N minutes. Gotcha: current Claude models reject forced `tool_choice`, `temperature` and assistant prefill - use plain tool calls.
+
 ## Ideas / next
-Long-video highlight finder (AutoClip approach: Whisper -> LLM picks moments -> clips), post-description generator, safe-zone preview in the UI.
+Descriptions for whole-video mode, safe-zone preview in the UI, face-tracking crop for podcasts (see AutoClip).

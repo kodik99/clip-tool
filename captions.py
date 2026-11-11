@@ -5,12 +5,29 @@ def _ts(t):
     h, rem = divmod(t, 3600); m, s = divmod(rem, 60)
     return f"{int(h)}:{int(m):02d}:{s:05.2f}"
 
-def transcribe_words(media, model="small", language=None):
+def transcribe_words(media, model="small", language=None, on_progress=None):
     from faster_whisper import WhisperModel
     m = WhisperModel(model, device="cpu", compute_type="int8")
     segs, info = m.transcribe(media, word_timestamps=True, language=language, vad_filter=True)
-    words = [(w.start, w.end, w.word.strip()) for s in segs for w in (s.words or []) if w.word.strip()]
+    words = []
+    for s in segs:
+        words += [(w.start, w.end, w.word.strip()) for w in (s.words or []) if w.word.strip()]
+        if on_progress:
+            on_progress(s.end)
     return words, info.language
+
+def save_words(words, lang, path):
+    import json
+    Path(path).write_text(json.dumps({"language": lang, "words": words}), encoding="utf-8")
+
+def load_words(path):
+    import json
+    d = json.loads(Path(path).read_text(encoding="utf-8"))
+    return [tuple(w) for w in d["words"]], d["language"]
+
+def window(words, start, end):
+    """Words inside [start, end], re-timed so the clip starts at 0."""
+    return [(s - start, e - start, t) for s, e, t in words if s >= start - 0.05 and e <= end + 0.05]
 
 def chunk(words, max_words=3, max_chars=22, gap=0.6):
     out, cur = [], []

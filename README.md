@@ -36,10 +36,24 @@ Linux: `sudo apt install ffmpeg`.
 Defaults (in `compose.py` flags): banner 65 % of frame width, bottom edge 280 px above the frame bottom,
 video block centred at y = 720 px of 1920, captions just above the banner. First run downloads the Whisper `small` model.
 
-## Not included (yet)
+## Find clips in long videos (needs an Anthropic API key)
 
-Auto-picking highlights from long videos / generating post descriptions needs an LLM and an API key.
-The plan is to plug in [AutoClip](https://github.com/artbyjazi/autoclip) for that. Short videos are processed whole.
+Pick **mode: find clips**. The tool transcribes the video (Whisper, local), asks Claude for the best standalone moments,
+renders each as a captioned 9:16 clip with your banner, and writes a **post description + hashtags** for each one
+(shown under the clip with a copy button).
+
+- **first N min**: only download/analyse the first N minutes (saves time and money). Blank = whole video.
+- **max clips / length**: how many clips and how long each may be (seconds).
+- **desc lang**: language for titles/descriptions (default: same as the video).
+- Cost is shown per job. Roughly a few US cents for a 20-minute podcast with a Sonnet-class model.
+
+Store your key once, in a terminal (hidden input, saved to the OS keychain; never paste keys into chats):
+
+```bash
+.venv/bin/python setkey.py
+```
+
+(or set `ANTHROPIC_API_KEY`). Whole-video mode needs no key.
 
 ## Notes
 
