@@ -35,6 +35,12 @@ Tuning facts (measured on a 2-person podcast): real faces score >=0.5, furniture
 Masked/balaclava faces are still not detected (they use the reuse / centre fallback). OpenCV 5 ships no Haar cascades.
 The NOTE line shows `face found in X, same-angle reuse Y, centre fallback Z` per render - check it when a crop looks wrong.
 
+## Transcription engines (`captions.transcribe_words`)
+`model` = tiny/base/small/medium (local faster-whisper) or `groq` (`groq_asr.py`: Whisper large-v3 via Groq's OpenAI-compatible
+`/audio/transcriptions`, `verbose_json` + `timestamp_granularities[]=word`, language hint, 10-min 16 kHz mono FLAC chunks because of the
+25 MB free-tier file cap, `retry-after` honoured on 429). Any Groq failure (no key, limit, offline) prints a `NOTE` and falls back to local
+`small`. Keys live in `keys.py` (env var, then keychain service `memeclip`; `python setkey.py [anthropic|groq]`). Never ask for keys in chat.
+
 ## Hook headline (`hook.py`)
 `compose.py --hook "text"` draws an explicit headline; `--hook-auto` asks `llm.make_hook` (one small Claude call on the transcript);
 `findclips.py --hook` makes `llm.pick_clips(..., want_hook=True)` return a `hook` per clip (same call). The headline is a transparent

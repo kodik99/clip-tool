@@ -42,6 +42,20 @@ face reuses the crop of a similar camera angle, else a centre crop. First use do
 Defaults (in `compose.py` flags): banner 65 % of frame width, bottom edge 280 px above the frame bottom,
 video block centred at y = 720 px of 1920, captions just above the banner. First run downloads the Whisper `small` model.
 
+## Faster / better transcription: Groq (free cloud, optional)
+
+In **captions > accuracy** choose **groq cloud (free, fast)**: Whisper large-v3 running in [Groq](https://console.groq.com)'s cloud.
+A 20-minute range takes seconds instead of ~10 minutes of local CPU, and large-v3 is more accurate than the local models on smaller
+languages such as Latvian (set **language** to e.g. `lv` for best results). Create a free key at console.groq.com, then store it:
+
+```bash
+.venv/bin/python setkey.py groq
+```
+
+(or set `GROQ_API_KEY`). The audio is uploaded to Groq (in 10-minute FLAC chunks), so don't use it for private material. Free-plan limits
+are roughly 20 requests/minute and 2 hours of audio per hour; if the key is missing or a limit is hit, the job continues with the local
+*balanced* model and the job note says so.
+
 ## Hook headline (optional, needs an API key)
 
 Tick **hook: headline on top** and Claude writes a short, catchy on-screen title (max ~55 characters) with 1-2 fitting emojis,

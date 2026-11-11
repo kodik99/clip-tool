@@ -6,6 +6,15 @@ def _ts(t):
     return f"{int(h)}:{int(m):02d}:{s:05.2f}"
 
 def transcribe_words(media, model="small", language=None, on_progress=None):
+    """model: tiny/base/small/medium (local, faster-whisper) or 'groq' (Whisper large-v3 in Groq's free cloud)."""
+    if model == "groq":
+        try:
+            import groq_asr
+            print("STAGE transcribing (groq large-v3, cloud)", flush=True)
+            return groq_asr.transcribe(media, language=language, on_progress=on_progress)
+        except Exception as e:                      # no key, rate limit, no internet...: don't fail the job
+            print(f"NOTE groq unavailable ({e}); used the local 'small' model instead", flush=True)
+            model = "small"
     from faster_whisper import WhisperModel
     sizes = {"tiny": "75 MB", "base": "140 MB", "small": "460 MB", "medium": "1.4 GB"}
     print(f"STAGE loading speech model ({model}; first use downloads about {sizes.get(model, '?')})", flush=True)

@@ -184,7 +184,7 @@ async def create_job(url: str = Form(""), banner: str = Form(...), layout: str =
     if mode not in ("whole", "clips"): raise HTTPException(400, "bad mode")
     if layout not in ("blur", "crop"): raise HTTPException(400, "bad layout")
     if cap_size not in ("normal", "large"): raise HTTPException(400, "bad caption size")
-    if model not in ("tiny", "base", "small", "medium"): raise HTTPException(400, "bad model")
+    if model not in ("tiny", "base", "small", "medium", "groq"): raise HTTPException(400, "bad model")
     if not (BANNERS / Path(banner).name).exists(): raise HTTPException(400, "banner not found")
     jid = uuid.uuid4().hex[:8]
     start_sec, end_sec = parse_time(t_from), parse_time(t_to)

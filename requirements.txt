@@ -9,3 +9,4 @@ keyring>=24        # reads your API key from the OS keychain
 numpy>=1.26
 mediapipe>=0.10    # crop corrector (face detection); needs Python 3.10-3.12 wheels
 pillow>=10        # hook headline image (text + emoji)
+httpx>=0.27     # Groq cloud transcription (also pulled in by anthropic)

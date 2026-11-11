@@ -115,12 +115,17 @@
       <option value="normal">normal</option><option value="large">large</option>
     </select></span>
     <span class="pair"><span class="dim small">accuracy</span>
-    <select id="model" title="speech recognition quality: better = slower. The first time you use a setting it downloads its model: fastest 75 MB, fast 140 MB, balanced 460 MB, best 1.4 GB">
+    <select id="model" title="speech recognition quality: better = slower. The first time you use a setting it downloads its model: fastest 75 MB, fast 140 MB, balanced 460 MB, best 1.4 GB. groq = Whisper large-v3 in the cloud: fast, needs a free Groq key, and your audio is sent to Groq">
       <option value="tiny">fastest</option><option value="base">fast</option>
       <option value="small" selected>balanced</option><option value="medium">best (slow)</option>
+      <option value="groq">groq cloud (free, fast)</option>
     </select></span>
     <span class="pair"><span class="dim small">language</span>
     <input type="text" id="lang" placeholder="auto" title="optional language code, e.g. pt, en, es" style="flex:none;min-width:0;width:56px" maxlength="5"></span>
+  </div>
+  <div class="row" id="groqhint" style="display:none">
+    <label></label>
+    <span class="dim small">groq: needs a free key (run: python setkey.py groq). the audio is sent to groq's servers.</span>
   </div>
   <div class="row">
     <label>hook</label>
@@ -190,6 +195,9 @@ $('bfile').onchange = async e => {
 
 // grey out the caption options when captions are off
 $('caps').onchange = () => { $('capopts').style.opacity = $('caps').checked ? '' : '.35'; $('capopts').querySelectorAll('select,input').forEach(e => e.disabled = !$('caps').checked); };
+
+// groq note
+$('model').onchange = () => { $('groqhint').style.display = $('model').value === 'groq' ? '' : 'none'; };
 
 // layout hints + crop corrector toggle
 const HINTS = { blur: 'blur-fill: whole video, blurred copy behind it', crop: 'crop: zooms in to fill the screen, the sides are cut off' };

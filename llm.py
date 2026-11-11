@@ -6,22 +6,9 @@ PRICE_IN, PRICE_OUT = 2.0, 10.0
 MODELS = [m for m in (os.environ.get("MEMECLIP_MODEL"), "claude-sonnet-5-5", "claude-sonnet-5") if m]
 
 def get_key():
-    """env ANTHROPIC_API_KEY -> keychain 'memeclip' -> keychain 'autoclip' (if you used AutoClip)."""
-    key = os.environ.get("ANTHROPIC_API_KEY")
-    if key:
-        return key
-    try:
-        import keyring
-    except ImportError:
-        return None
-    for service in ("memeclip", "autoclip"):
-        try:
-            v = keyring.get_password(service, "anthropic")
-            if v:
-                return v
-        except Exception:
-            pass
-    return None
+    """Anthropic key: env ANTHROPIC_API_KEY -> keychain 'memeclip' -> keychain 'autoclip' (see keys.py)."""
+    import keys
+    return keys.get_secret("anthropic")
 
 def _mmss(t):
     return f"{int(t // 60):02d}:{int(t % 60):02d}"
