@@ -7,7 +7,10 @@ def _ts(t):
 
 def transcribe_words(media, model="small", language=None, on_progress=None):
     from faster_whisper import WhisperModel
-    m = WhisperModel(model, device="cpu", compute_type="int8")
+    sizes = {"tiny": "75 MB", "base": "140 MB", "small": "460 MB", "medium": "1.4 GB"}
+    print(f"STAGE loading speech model ({model}; first use downloads about {sizes.get(model, '?')})", flush=True)
+    m = WhisperModel(model, device="cpu", compute_type="int8")      # downloads the model on first use
+    print("STAGE transcribing", flush=True)
     segs, info = m.transcribe(media, word_timestamps=True, language=language, vad_filter=True)
     words = []
     for s in segs:
