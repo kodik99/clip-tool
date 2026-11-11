@@ -45,8 +45,7 @@
   #drop.has { color: var(--fg); border-style: solid; }
   fieldset { border: 1px solid var(--line); margin: 16px 0; padding: 8px 14px 10px; min-width: 0; }
   fieldset:focus-within { border-color: #3d3d3d; }
-  legend { color: var(--dim); padding: 0 6px; font-size: 12px; }
-  legend b { color: var(--acc); font-weight: normal; }
+  legend { color: var(--acc); padding: 0 6px; font-size: 12px; }
   .row > label.opt:first-child { width: auto; color: var(--fg); margin-right: 4px; }
   .sub { margin: 2px 0 6px 22px; padding: 2px 0 2px 14px; border-left: 1px solid var(--line); }
   .small { font-size: 12px; }
@@ -76,7 +75,7 @@
 <div id="cut" aria-hidden="true"></div>
 
 <fieldset>
-  <legend><b>1</b> source</legend>
+  <legend>source</legend>
   <div class="row">
     <input type="text" id="url" placeholder="paste a video link" autocomplete="off" spellcheck="false">
     <span class="dim">or</span>
@@ -86,7 +85,7 @@
 </fieldset>
 
 <fieldset>
-  <legend><b>2</b> look</legend>
+  <legend>look</legend>
   <div class="row">
     <label>banner</label>
     <select id="banner"></select>
@@ -117,7 +116,7 @@
 </fieldset>
 
 <fieldset>
-  <legend><b>3</b> mode</legend>
+  <legend>mode</legend>
   <div class="row"><label class="opt"><input type="radio" name="mode" value="whole" checked> whole video</label><span class="dim small">no ai, no cost</span></div>
   <div class="row"><label class="opt"><input type="radio" name="mode" value="clips"> find clips</label><span class="dim small">whisper + claude pick the best moments and write descriptions (cents)</span></div>
   <div class="sub" id="clipopts" style="display:none">
@@ -133,7 +132,7 @@
 <div class="row" style="margin:14px 0 0"><button class="go" id="run" style="margin-top:0">run &gt;</button><button class="kill" id="kill" type="button" title="stop the current job and delete all of its files">kill + delete</button><span id="msg" class="err"></span></div>
 
 <fieldset style="margin-top:22px">
-  <legend><b>4</b> output</legend>
+  <legend>output</legend>
   <div class="head"><button id="clear" type="button">clear all</button><span id="usage" class="dim small"></span></div>
   <div id="jobs" class="dim">no jobs yet</div>
 </fieldset>
