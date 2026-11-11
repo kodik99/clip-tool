@@ -38,10 +38,17 @@
   button:hover, .btn:hover { border-color: var(--acc); color: var(--acc); }
   button.go { color: var(--acc); border-color: var(--acc); margin-top: 10px; }
   button:disabled { opacity: .4; cursor: default; }
-  #drop { border: 1px dashed var(--line); padding: 8px 12px; color: var(--dim); cursor: pointer; flex: 1; min-width: 200px; }
+  #drop { border: 1px dashed var(--line); padding: 6px 12px; color: var(--dim); cursor: pointer; flex: 1; min-width: 180px; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #drop.over { border-color: var(--acc); color: var(--acc); }
   #drop.has { color: var(--fg); border-style: solid; }
-  hr { border: 0; border-top: 1px solid var(--line); margin: 26px 0 14px; }
+  fieldset { border: 1px solid var(--line); margin: 16px 0; padding: 8px 14px 10px; min-width: 0; }
+  fieldset:focus-within { border-color: #3d3d3d; }
+  legend { color: var(--dim); padding: 0 6px; font-size: 12px; }
+  legend b { color: var(--acc); font-weight: normal; }
+  .row > label.opt:first-child { width: auto; color: var(--fg); margin-right: 4px; }
+  .sub { margin: 2px 0 6px 22px; padding: 2px 0 2px 14px; border-left: 1px solid var(--line); }
+  .small { font-size: 12px; }
+  .head { display: flex; gap: 10px; align-items: baseline; margin: 2px 0 12px; }
   .job { margin: 0 0 18px; }
   .job .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .bar { color: var(--acc); white-space: pre; }
@@ -56,58 +63,62 @@
 <body>
 <h1>$ clip <span class="dim">— link or file in, 9:16 + banner + captions out</span></h1>
 
-<div class="row">
-  <label>source</label>
-  <input type="text" id="url" placeholder="paste youtube / video link" autocomplete="off" spellcheck="false">
-  <span class="dim">or</span>
-  <div id="drop">drop / click to pick a file</div>
-  <input type="file" id="file" accept="video/*">
-</div>
+<fieldset>
+  <legend><b>1</b> source</legend>
+  <div class="row">
+    <input type="text" id="url" placeholder="paste a video link" autocomplete="off" spellcheck="false">
+    <span class="dim">or</span>
+    <div id="drop">drop a file here</div>
+    <input type="file" id="file" accept="video/*">
+  </div>
+</fieldset>
 
-<div class="row">
-  <label>banner</label>
-  <select id="banner"></select>
-  <button id="addb" type="button">+ upload</button>
-  <input type="file" id="bfile" accept="video/mp4">
-</div>
+<fieldset>
+  <legend><b>2</b> look</legend>
+  <div class="row">
+    <label>banner</label>
+    <select id="banner"></select>
+    <button id="addb" type="button">+ upload</button>
+    <input type="file" id="bfile" accept="video/mp4">
+  </div>
+  <div class="row">
+    <label>layout</label>
+    <label class="opt"><input type="radio" name="layout" value="blur" checked> blur-fill</label>
+    <label class="opt"><input type="radio" name="layout" value="crop"> crop</label>
+    <label class="opt"><input type="radio" name="layout" value="fit"> fit</label>
+  </div>
+  <div class="row">
+    <label>captions</label>
+    <label class="opt"><input type="checkbox" id="caps" checked> on</label>
+    <select id="model">
+      <option value="tiny">tiny</option><option value="base">base</option>
+      <option value="small" selected>small</option><option value="medium">medium</option>
+    </select>
+    <input type="text" id="lang" placeholder="lang (auto)" style="flex:none;min-width:0;width:100px" maxlength="5">
+  </div>
+</fieldset>
 
-<div class="row">
-  <label>layout</label>
-  <label class="opt"><input type="radio" name="layout" value="blur" checked> blur-fill</label>
-  <label class="opt"><input type="radio" name="layout" value="crop"> crop</label>
-  <label class="opt"><input type="radio" name="layout" value="fit"> fit</label>
-</div>
+<fieldset>
+  <legend><b>3</b> mode</legend>
+  <div class="row"><label class="opt"><input type="radio" name="mode" value="whole" checked> whole video</label><span class="dim small">no ai, no cost</span></div>
+  <div class="row"><label class="opt"><input type="radio" name="mode" value="clips"> find clips</label><span class="dim small">whisper + claude pick the best moments and write descriptions (cents)</span></div>
+  <div class="sub" id="clipopts" style="display:none">
+    <div class="row"><span>from <input type="text" id="tfrom" placeholder="0:00" style="flex:none;min-width:0;width:64px"> to <input type="text" id="tto" placeholder="end" style="flex:none;min-width:0;width:64px"></span></div>
+    <div class="row">
+      <span>max <input type="text" id="nclips" value="5" style="flex:none;min-width:0;width:34px"> clips</span>
+      <span>length <input type="text" id="minlen" value="15" style="flex:none;min-width:0;width:34px">-<input type="text" id="maxlen" value="60" style="flex:none;min-width:0;width:34px"> s</span>
+      <span>desc lang <input type="text" id="dlang" placeholder="same as video" style="flex:none;min-width:0;width:120px"></span>
+    </div>
+  </div>
+</fieldset>
 
-<div class="row">
-  <label>mode</label>
-  <label class="opt"><input type="radio" name="mode" value="whole" checked> whole video</label>
-  <label class="opt"><input type="radio" name="mode" value="clips"> find clips</label>
-</div>
+<div class="row" style="margin:14px 0 0"><button class="go" id="run" style="margin-top:0">run &gt;</button><span id="msg" class="err"></span></div>
 
-<div class="row" id="clipopts" style="display:none">
-  <label>clips</label>
-  <span>from <input type="text" id="tfrom" placeholder="0:00" style="flex:none;min-width:0;width:64px"> to <input type="text" id="tto" placeholder="end" style="flex:none;min-width:0;width:64px"></span>
-  <span>max <input type="text" id="nclips" value="5" style="flex:none;min-width:0;width:34px"> clips</span>
-  <span>length <input type="text" id="minlen" value="15" style="flex:none;min-width:0;width:34px">-<input type="text" id="maxlen" value="60" style="flex:none;min-width:0;width:34px"> s</span>
-  <span>desc lang <input type="text" id="dlang" placeholder="same as video" style="flex:none;min-width:0;width:120px"></span>
-</div>
-
-<div class="row">
-  <label>captions</label>
-  <label class="opt"><input type="checkbox" id="caps" checked> on</label>
-  <select id="model">
-    <option value="tiny">tiny</option><option value="base">base</option>
-    <option value="small" selected>small</option><option value="medium">medium</option>
-  </select>
-  <input type="text" id="lang" placeholder="lang (auto)" style="flex:none;min-width:0;width:100px" maxlength="5">
-</div>
-
-<div class="row"><span style="width:78px"></span><button class="go" id="run">run &gt;</button><span id="msg" class="err"></span></div>
-<div class="dim" style="margin-top:14px" id="modehint">whole video: no AI, no cost.</div>
-
-<hr>
-<div class="row" style="margin-top:0"><span class="dim">jobs</span><button id="clear" type="button">clear all</button><span id="usage" class="dim"></span></div>
-<div id="jobs" class="dim">no jobs yet</div>
+<fieldset style="margin-top:22px">
+  <legend><b>4</b> output</legend>
+  <div class="head"><button id="clear" type="button">clear all</button><span id="usage" class="dim small"></span></div>
+  <div id="jobs" class="dim">no jobs yet</div>
+</fieldset>
 
 <script>
 const $ = id => document.getElementById(id);
@@ -124,7 +135,7 @@ async function loadBanners(sel) {
 const drop = $('drop');
 function setFile(f) {
   picked = f;
-  drop.textContent = f ? f.name : 'drop / click to pick a file';
+  drop.textContent = f ? f.name : 'drop a file here';
   drop.classList.toggle('has', !!f);
   if (f) $('url').value = '';
 }
@@ -149,7 +160,6 @@ $('bfile').onchange = async e => {
 document.querySelectorAll('input[name=mode]').forEach(r => r.onchange = () => {
   const clips = document.querySelector('input[name=mode]:checked').value === 'clips';
   $('clipopts').style.display = clips ? '' : 'none';
-  $('modehint').textContent = clips ? 'find clips: whisper + claude pick the best moments and write descriptions (a few cents per video).' : 'whole video: no AI, no cost.';
 });
 
 // run
