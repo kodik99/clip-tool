@@ -179,7 +179,7 @@ async def upload_banner(file: UploadFile = File(...)):
 @app.post("/api/jobs")
 async def create_job(url: str = Form(""), banner: str = Form(...), layout: str = Form("blur"),
                      captions: bool = Form(True), crop_fix: bool = Form(False), hook: bool = Form(False), cap_size: str = Form("normal"), model: str = Form("small"), language: str = Form(""),
-                     mode: str = Form("whole"), want_desc: bool = Form(False), t_from: str = Form(""), t_to: str = Form(""), max_clips: int = Form(5),
+                     mode: str = Form("whole"), t_from: str = Form(""), t_to: str = Form(""), max_clips: int = Form(5),
                      min_len: float = Form(15), max_len: float = Form(60), desc_lang: str = Form(""),
                      file: UploadFile | None = File(None)):
     if mode not in ("whole", "clips", "part"): raise HTTPException(400, "bad mode")
@@ -195,7 +195,7 @@ async def create_job(url: str = Form(""), banner: str = Form(...), layout: str =
         if not 3 <= end_sec - start_sec <= 600: raise HTTPException(400, "a part must be between 3 seconds and 10 minutes")
     if end_sec is not None and end_sec - (start_sec or 0) > 4 * 3600: raise HTTPException(400, "range too long (max 4 h)")
     opts = dict(banner=Path(banner).name, layout=layout, captions=captions, crop_fix=crop_fix and layout == "crop", hook=hook, cap_size=cap_size, model=model, language=language.strip(),
-                mode=mode, describe=want_desc, start_sec=start_sec or 0, end_sec=end_sec, max_clips=max(1, min(max_clips, 10)),
+                mode=mode, describe=(hook and mode == "part"), start_sec=start_sec or 0, end_sec=end_sec, max_clips=max(1, min(max_clips, 10)),
                 min_len=max(5.0, min(min_len, 180.0)), max_len=max(10.0, min(max_len, 180.0)), desc_lang=desc_lang.strip()[:40])
     if file is not None and file.filename:
         wd = JOBS_DIR / jid; wd.mkdir(exist_ok=True)

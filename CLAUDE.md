@@ -36,7 +36,7 @@ Masked/balaclava faces are still not detected (they use the reuse / centre fallb
 The NOTE line shows `face found in X, same-angle reuse Y, centre fallback Z` per render - check it when a crop looks wrong.
 
 ## Manual part mode (`findclips.py --manual`)
-Mode `part` in the UI/app reuses `findclips.py` with `--manual --offset FROM --limit-sec LEN [--describe]`: no Claude pick, the clip is exactly
+Mode `part` in the UI/app reuses `findclips.py` with `--manual --offset FROM --limit-sec LEN [--describe]` (the app passes `--describe` whenever the look-box hook toggle is ticked in part mode): no Claude pick, the clip is exactly
 FROM..FROM+LEN. Transcription runs only if captions or AI text/hook are wanted (`need_words`); `llm.describe_clip` writes title/description/hook for
 the chosen part and is skipped (with a NOTE) if there is no Anthropic key. App validation: both from and to required, 3 s <= length <= 10 min.
 Times: a plain number is MINUTES ("5" = 5 min); use "0:05" for 5 seconds.

@@ -130,7 +130,7 @@
   <div class="row">
     <label>hook</label>
     <label class="opt"><input type="checkbox" id="hook"> headline on top</label>
-    <span class="dim small">ai writes a catchy title with emojis (needs api key)</span>
+    <span class="dim small" id="hookhint">ai writes a catchy headline with emojis (needs api key)</span>
   </div>
 </fieldset>
 
@@ -145,9 +145,6 @@
     <div class="row" id="clipsrow">
       <span>max <input type="text" id="nclips" value="5" style="flex:none;min-width:0;width:34px"> clips</span>
       <span>length <input type="text" id="minlen" value="15" style="flex:none;min-width:0;width:34px">-<input type="text" id="maxlen" value="60" style="flex:none;min-width:0;width:34px"> s</span>
-    </div>
-    <div class="row" id="partrow" style="display:none">
-      <label class="opt"><input type="checkbox" id="pdesc"> write title + description</label><span class="dim small">ai, a fraction of a cent (needs api key)</span>
     </div>
     <div class="row"><span>desc lang <input type="text" id="dlang" placeholder="same as video" style="flex:none;min-width:0;width:120px"></span></div>
   </div>
@@ -217,10 +214,14 @@ document.querySelectorAll('input[name=mode]').forEach(r => r.onchange = () => {
   const m = curMode();
   $('clipopts').style.display = m === 'whole' ? 'none' : '';
   $('clipsrow').style.display = m === 'clips' ? '' : 'none';
-  $('partrow').style.display = m === 'part' ? '' : 'none';
   $('rangehint').textContent = m === 'part' ? 'required, e.g. 12:30 to 13:10 (3 s to 10 min)' : 'optional: blank = the whole video';
   $('tfrom').placeholder = m === 'part' ? '12:30' : '0:00'; $('tto').placeholder = m === 'part' ? '13:10' : 'end';
   $('hook').checked = m === 'clips';       // find clips: headline on by default (same Claude call); other modes: off
+  $('hookhint').textContent = ({
+    whole: 'ai writes a catchy headline with emojis (needs api key)',
+    clips: 'ai writes the headline (titles + descriptions always come with find clips)',
+    part:  'ai writes the headline plus a title + description for your clip (needs api key)',
+  })[m];
 });
 
 // run
@@ -248,7 +249,6 @@ $('run').onclick = async () => {
     fd.append('max_clips', $('nclips').value || '5');
     fd.append('min_len', $('minlen').value || '15'); fd.append('max_len', $('maxlen').value || '60');
   }
-  if (mode === 'part') fd.append('want_desc', $('pdesc').checked ? 'true' : 'false');
   $('run').disabled = true;
   const pend = document.createElement('div'); pend.id = 'pending'; pend.className = 'job';
   pend.textContent = '> sending ' + (picked ? picked.name : url) + ' ...';
