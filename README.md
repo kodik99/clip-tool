@@ -1,4 +1,4 @@
-# memeclip
+# sclip
 
 Local web tool: paste a video link (or drop a file) and get a **9:16 vertical clip** for TikTok / Reels with
 
