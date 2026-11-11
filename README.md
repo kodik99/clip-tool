@@ -42,6 +42,13 @@ face reuses the crop of a similar camera angle, else a centre crop. First use do
 Defaults (in `compose.py` flags): banner 65 % of frame width, bottom edge 280 px above the frame bottom,
 video block centred at y = 720 px of 1920, captions just above the banner. First run downloads the Whisper `small` model.
 
+## Cut a part (you choose the clip)
+
+Pick **mode: cut a part**, paste the link, and fill in **from** and **to** (e.g. `12:30` to `13:10`; plain numbers mean minutes,
+so use `0:05` for five seconds; 3 seconds to 10 minutes). You get exactly that range as one clip with your layout, captions, banner
+and (optionally) the hook headline. Tick **write title + description** to have Claude add post text (a fraction of a cent). With captions
+off and no AI, nothing is transcribed at all, so it is fast. The whole video is still downloaded first and deleted afterwards.
+
 ## Faster / better transcription: Groq (free cloud, optional)
 
 In **captions > accuracy** choose **groq cloud (free, fast)**: Whisper large-v3 running in [Groq](https://console.groq.com)'s cloud.

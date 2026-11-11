@@ -107,3 +107,50 @@ def make_hook(transcript, desc_lang=""):
     text = " ".join(text.split())
     ti, to = msg.usage.input_tokens, msg.usage.output_tokens
     return text, {"model": model, "in": ti, "out": to, "usd": (ti * PRICE_IN + to * PRICE_OUT) / 1e6}
+
+
+DESCRIBE_TOOL = {
+    "name": "submit_clip_text",
+    "description": "Submit the post text for the clip.",
+    "input_schema": {"type": "object", "properties": {
+        "title": {"type": "string", "description": "short title, max 60 characters"},
+        "description": {"type": "string", "description": "ready-to-post TikTok/Reels caption (1-2 punchy sentences) + 3-5 hashtags"},
+        "hook": {"type": "string", "description": "on-screen headline for the top of the video: max 55 characters, curiosity-driven, ending with 1-2 fitting emojis"},
+    }, "required": ["title", "description"]},
+}
+
+
+def describe_clip(transcript, desc_lang="", want_hook=False):
+    """One small call for a clip the USER chose: title + post description (+ on-screen hook). -> (dict, usage)."""
+    import anthropic
+    key = get_key()
+    if not key:
+        raise RuntimeError("No Anthropic API key found. Run: python setkey.py")
+    lang = desc_lang.strip() or "the same language as the transcript"
+    system = ("You write post text for one short vertical video (TikTok / Instagram Reels) from its transcript. "
+              f"Write in {lang}. Give a title, and a description of 1-2 punchy sentences plus 3-5 relevant hashtags."
+              + (" Also fill the hook field: a punchy on-screen headline (max 55 characters, curiosity-driven, no hashtags, "
+                 "no quotation marks) ending with 1-2 emojis that fit the topic." if want_hook else "")
+              + " Return your answer only via the submit_clip_text tool.")
+    client = anthropic.Anthropic(api_key=key)
+    ti = to = 0
+    info, last = None, None
+    for model in MODELS:
+        try:
+            for attempt in range(2):
+                msg = client.messages.create(model=model, max_tokens=1024, system=system, tools=[DESCRIBE_TOOL],
+                                             messages=[{"role": "user", "content": transcript[:8000] + ("" if attempt == 0 else "\n\nCall the submit_clip_text tool now.")}])
+                ti += msg.usage.input_tokens; to += msg.usage.output_tokens
+                for block in msg.content:
+                    if block.type == "tool_use":
+                        info = block.input
+                if info is not None:
+                    break
+            break
+        except anthropic.NotFoundError as e:
+            last = e
+    else:
+        raise RuntimeError(f"No usable Claude model found: {last}")
+    if info is None:
+        raise RuntimeError("Claude did not return the text")
+    return {k: info.get(k, "") for k in ("title", "description", "hook")}, {"model": model, "in": ti, "out": to, "usd": (ti * PRICE_IN + to * PRICE_OUT) / 1e6}

@@ -35,6 +35,12 @@ Tuning facts (measured on a 2-person podcast): real faces score >=0.5, furniture
 Masked/balaclava faces are still not detected (they use the reuse / centre fallback). OpenCV 5 ships no Haar cascades.
 The NOTE line shows `face found in X, same-angle reuse Y, centre fallback Z` per render - check it when a crop looks wrong.
 
+## Manual part mode (`findclips.py --manual`)
+Mode `part` in the UI/app reuses `findclips.py` with `--manual --offset FROM --limit-sec LEN [--describe]`: no Claude pick, the clip is exactly
+FROM..FROM+LEN. Transcription runs only if captions or AI text/hook are wanted (`need_words`); `llm.describe_clip` writes title/description/hook for
+the chosen part and is skipped (with a NOTE) if there is no Anthropic key. App validation: both from and to required, 3 s <= length <= 10 min.
+Times: a plain number is MINUTES ("5" = 5 min); use "0:05" for 5 seconds.
+
 ## Transcription engines (`captions.transcribe_words`)
 `model` = tiny/base/small/medium (local faster-whisper) or `groq` (`groq_asr.py`: Whisper large-v3 via Groq's OpenAI-compatible
 `/audio/transcriptions`, `verbose_json` + `timestamp_granularities[]=word`, language hint, 10-min 16 kHz mono FLAC chunks because of the

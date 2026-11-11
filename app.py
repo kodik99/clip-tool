@@ -94,11 +94,12 @@ def run_job(jid):
             if job.get("cancelled"): raise RuntimeError("killed")
             if p.wait() != 0 or not src.exists():
                 raise RuntimeError("download failed")
-        if o["mode"] == "clips":
+        if o["mode"] in ("clips", "part"):
             cmd = [sys.executable, str(HERE / "findclips.py"), str(src), str(BANNERS / o["banner"]), str(wd / "clips"),
                    "--layout", o["layout"], "--whisper-model", o["model"], "--max-clips", str(o["max_clips"]),
                    "--min-len", str(o["min_len"]), "--max-len", str(o["max_len"]), "--desc-lang", o["desc_lang"],
                    "--captions" if o["captions"] else "--no-captions", "--crop-fix" if o.get("crop_fix") else "--no-crop-fix", "--caption-size", o["cap_size"], "--hook" if o.get("hook") else "--no-hook"]
+            if o["mode"] == "part": cmd += ["--manual", "--describe" if o.get("describe") else "--no-describe"]
             cmd += ["--offset", str(o.get("start_sec") or 0)]
             if o.get("end_sec"): cmd += ["--limit-sec", str(o["end_sec"] - (o.get("start_sec") or 0))]
         else:
@@ -130,8 +131,8 @@ def run_job(jid):
             elif not re.search(r"warn|tip:|^INFO:|^[IWE]\d{4} |^objc\[", line, re.I): log(job, line)
         if job.get("cancelled"): raise RuntimeError("killed")
         if p.wait() != 0:
-            raise RuntimeError("clip finder failed" if o["mode"] == "clips" else "render failed")
-        if o["mode"] != "clips":
+            raise RuntimeError("clip finder failed" if o["mode"] in ("clips", "part") else "render failed")
+        if o["mode"] not in ("clips", "part"):
             out = wd / "out.mp4"
             if not out.exists(): raise RuntimeError("render failed")
             final = f"{jid}.mp4"; shutil.move(str(out), OUTPUT / final)
@@ -178,10 +179,10 @@ async def upload_banner(file: UploadFile = File(...)):
 @app.post("/api/jobs")
 async def create_job(url: str = Form(""), banner: str = Form(...), layout: str = Form("blur"),
                      captions: bool = Form(True), crop_fix: bool = Form(False), hook: bool = Form(False), cap_size: str = Form("normal"), model: str = Form("small"), language: str = Form(""),
-                     mode: str = Form("whole"), t_from: str = Form(""), t_to: str = Form(""), max_clips: int = Form(5),
+                     mode: str = Form("whole"), want_desc: bool = Form(False), t_from: str = Form(""), t_to: str = Form(""), max_clips: int = Form(5),
                      min_len: float = Form(15), max_len: float = Form(60), desc_lang: str = Form(""),
                      file: UploadFile | None = File(None)):
-    if mode not in ("whole", "clips"): raise HTTPException(400, "bad mode")
+    if mode not in ("whole", "clips", "part"): raise HTTPException(400, "bad mode")
     if layout not in ("blur", "crop"): raise HTTPException(400, "bad layout")
     if cap_size not in ("normal", "large"): raise HTTPException(400, "bad caption size")
     if model not in ("tiny", "base", "small", "medium", "groq"): raise HTTPException(400, "bad model")
@@ -189,9 +190,12 @@ async def create_job(url: str = Form(""), banner: str = Form(...), layout: str =
     jid = uuid.uuid4().hex[:8]
     start_sec, end_sec = parse_time(t_from), parse_time(t_to)
     if end_sec is not None and end_sec <= (start_sec or 0): raise HTTPException(400, "'to' must be after 'from'")
+    if mode == "part":
+        if end_sec is None or t_from.strip() == "": raise HTTPException(400, "cut a part: fill in both 'from' and 'to'")
+        if not 3 <= end_sec - start_sec <= 600: raise HTTPException(400, "a part must be between 3 seconds and 10 minutes")
     if end_sec is not None and end_sec - (start_sec or 0) > 4 * 3600: raise HTTPException(400, "range too long (max 4 h)")
     opts = dict(banner=Path(banner).name, layout=layout, captions=captions, crop_fix=crop_fix and layout == "crop", hook=hook, cap_size=cap_size, model=model, language=language.strip(),
-                mode=mode, start_sec=start_sec or 0, end_sec=end_sec, max_clips=max(1, min(max_clips, 10)),
+                mode=mode, describe=want_desc, start_sec=start_sec or 0, end_sec=end_sec, max_clips=max(1, min(max_clips, 10)),
                 min_len=max(5.0, min(min_len, 180.0)), max_len=max(10.0, min(max_len, 180.0)), desc_lang=desc_lang.strip()[:40])
     if file is not None and file.filename:
         wd = JOBS_DIR / jid; wd.mkdir(exist_ok=True)

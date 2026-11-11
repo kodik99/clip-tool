@@ -138,13 +138,18 @@
   <legend>mode</legend>
   <div class="row"><label class="opt"><input type="radio" name="mode" value="whole" checked> whole video</label><span class="dim small">no ai, no cost</span></div>
   <div class="row"><label class="opt"><input type="radio" name="mode" value="clips"> find clips</label><span class="dim small">whisper + claude pick the best moments and write descriptions (cents)</span></div>
+  <div class="row"><label class="opt"><input type="radio" name="mode" value="part"> cut a part</label><span class="dim small">you choose the start and end of one clip; no ai picking</span></div>
   <div class="sub" id="clipopts" style="display:none">
-    <div class="row"><span>from <input type="text" id="tfrom" placeholder="0:00" style="flex:none;min-width:0;width:64px"> to <input type="text" id="tto" placeholder="end" style="flex:none;min-width:0;width:64px"></span></div>
-    <div class="row">
+    <div class="row"><span>from <input type="text" id="tfrom" placeholder="0:00" style="flex:none;min-width:0;width:64px"> to <input type="text" id="tto" placeholder="end" style="flex:none;min-width:0;width:64px"></span>
+      <span class="dim small" id="rangehint">optional: blank = the whole video</span></div>
+    <div class="row" id="clipsrow">
       <span>max <input type="text" id="nclips" value="5" style="flex:none;min-width:0;width:34px"> clips</span>
       <span>length <input type="text" id="minlen" value="15" style="flex:none;min-width:0;width:34px">-<input type="text" id="maxlen" value="60" style="flex:none;min-width:0;width:34px"> s</span>
-      <span>desc lang <input type="text" id="dlang" placeholder="same as video" style="flex:none;min-width:0;width:120px"></span>
     </div>
+    <div class="row" id="partrow" style="display:none">
+      <label class="opt"><input type="checkbox" id="pdesc"> write title + description</label><span class="dim small">ai, a fraction of a cent (needs api key)</span>
+    </div>
+    <div class="row"><span>desc lang <input type="text" id="dlang" placeholder="same as video" style="flex:none;min-width:0;width:120px"></span></div>
   </div>
 </fieldset>
 
@@ -206,11 +211,16 @@ document.querySelectorAll('input[name=layout]').forEach(r => r.onchange = () => 
   $('layouthint').textContent = HINTS[v]; $('cropfix').style.display = v === 'crop' ? '' : 'none';
 });
 
-// mode toggle
+// mode toggle: whole video / find clips / cut a part
+function curMode() { return document.querySelector('input[name=mode]:checked').value; }
 document.querySelectorAll('input[name=mode]').forEach(r => r.onchange = () => {
-  const clips = document.querySelector('input[name=mode]:checked').value === 'clips';
-  $('clipopts').style.display = clips ? '' : 'none';
-  $('hook').checked = clips;               // find clips: headline on by default (same Claude call); whole video: off
+  const m = curMode();
+  $('clipopts').style.display = m === 'whole' ? 'none' : '';
+  $('clipsrow').style.display = m === 'clips' ? '' : 'none';
+  $('partrow').style.display = m === 'part' ? '' : 'none';
+  $('rangehint').textContent = m === 'part' ? 'required, e.g. 12:30 to 13:10 (3 s to 10 min)' : 'optional: blank = the whole video';
+  $('tfrom').placeholder = m === 'part' ? '12:30' : '0:00'; $('tto').placeholder = m === 'part' ? '13:10' : 'end';
+  $('hook').checked = m === 'clips';       // find clips: headline on by default (same Claude call); other modes: off
 });
 
 // run
@@ -219,6 +229,7 @@ $('run').onclick = async () => {
   const url = $('url').value.trim();
   if (!url && !picked) { $('msg').textContent = 'need a link or a file'; return; }
   if (!$('banner').value) { $('msg').textContent = 'need a banner'; return; }
+  if (curMode() === 'part' && (!$('tfrom').value.trim() || !$('tto').value.trim())) { $('msg').textContent = 'cut a part: fill in both from and to'; return; }
   const fd = new FormData();
   fd.append('url', url);
   if (picked) fd.append('file', picked);
@@ -230,13 +241,14 @@ $('run').onclick = async () => {
   fd.append('hook', $('hook').checked ? 'true' : 'false');
   fd.append('model', $('model').value);
   fd.append('language', $('lang').value);
-  const mode = document.querySelector('input[name=mode]:checked').value;
+  const mode = curMode();
   fd.append('mode', mode);
+  if (mode !== 'whole') { fd.append('t_from', $('tfrom').value); fd.append('t_to', $('tto').value); fd.append('desc_lang', $('dlang').value); }
   if (mode === 'clips') {
-    fd.append('t_from', $('tfrom').value); fd.append('t_to', $('tto').value); fd.append('max_clips', $('nclips').value || '5');
+    fd.append('max_clips', $('nclips').value || '5');
     fd.append('min_len', $('minlen').value || '15'); fd.append('max_len', $('maxlen').value || '60');
-    fd.append('desc_lang', $('dlang').value);
   }
+  if (mode === 'part') fd.append('want_desc', $('pdesc').checked ? 'true' : 'false');
   $('run').disabled = true;
   const pend = document.createElement('div'); pend.id = 'pending'; pend.className = 'job';
   pend.textContent = '> sending ' + (picked ? picked.name : url) + ' ...';
