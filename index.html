@@ -62,20 +62,18 @@
   input[type=file] { display: none; }
   header { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 6px; flex-wrap: wrap; }
   header h1 { margin: 0; }
-  #orbit { display: grid; grid-template-columns: repeat(19, 1ch); grid-auto-rows: 1.12em; line-height: 1.12em;
-           user-select: none; font-size: 12px; }
-  #orbit i { font-style: normal; text-align: center; }
-  #orbit .r { color: var(--line); }
-  #orbit .b { color: var(--dim); }
-  #orbit .f { color: var(--acc); }
-  #orbit .c { color: var(--acc); font-weight: bold; }
+  #cut { display: flex; overflow: hidden; white-space: pre; user-select: none; font-size: 13px;
+         height: 1.5em; line-height: 1.5em; margin: 4px 0 10px; }
+  #cut i { flex: none; width: 1ch; text-align: center; font-style: normal; color: var(--dim); }
+  #cut i.h { color: var(--line); }
+  #cut i.s { color: var(--acc); font-weight: bold; font-size: 1.35em; overflow: visible; }
 </style>
 </head>
 <body>
 <header>
   <h1>$ clip <span class="dim">— link or file in, 9:16 + banner + captions out</span></h1>
-  <div id="orbit" aria-hidden="true"></div>
 </header>
+<div id="cut" aria-hidden="true"></div>
 
 <fieldset>
   <legend><b>1</b> source</legend>
@@ -297,32 +295,39 @@ async function poll() {
   orbitSpeed = busy ? 3 : 1;
   timer = setTimeout(poll, busy ? 1000 : 4000);
 }
-// ascii orbit: a "$" with currencies circling it (faster while a job runs)
+// scissors cutting along a dashed line (faster while a job runs)
 let orbitSpeed = 1;
 (function () {
-  const W = 19, H = 9, cx = 9, cy = 4, rx = 8, ry = 3.6;
-  const coins = ['€', '£', '¥', '₩', '₹', '₿'];
-  const el = $('orbit'), cells = [];
-  for (let k = 0; k < W * H; k++) { const c = document.createElement('i'); c.textContent = ' '; el.appendChild(c); cells.push(c); }
-  let t = 0;
+  const el = $('cut'), TRAIL = 9, HEAL = 5;
+  let cells = [], n = 0, pos = -2, tick = 0;
+  function build() {
+    const probe = document.createElement('span');
+    probe.textContent = '0000000000'; probe.style.cssText = 'position:absolute;visibility:hidden;white-space:pre';
+    el.appendChild(probe); const chw = probe.getBoundingClientRect().width / 10; probe.remove();
+    n = Math.max(10, Math.floor(el.clientWidth / (chw || 8)));
+    el.textContent = ''; cells = [];
+    for (let k = 0; k < n; k++) { const c = document.createElement('i'); el.appendChild(c); cells.push(c); }
+  }
   function frame() {
-    const g = new Array(W * H).fill(null);
-    const put = (x, y, ch, cls) => { x = Math.round(x); y = Math.round(y); if (x >= 0 && x < W && y >= 0 && y < H) g[y * W + x] = [ch, cls]; };
-    for (let k = 0; k < 40; k++) { const a = k / 40 * 2 * Math.PI; put(cx + rx * Math.cos(a), cy + ry * Math.sin(a), '·', 'r'); }
-    coins.forEach((ch, i) => {
-      const a = t + i * 2 * Math.PI / coins.length;
-      put(cx + rx * Math.cos(a), cy + ry * Math.sin(a), ch, Math.sin(a) > 0 ? 'f' : 'b');   // lower half = in front
-    });
-    put(cx, cy, '$', 'c');
-    for (let k = 0; k < g.length; k++) {
-      const [ch, cls] = g[k] || [' ', ''];
+    const ip = Math.floor(pos), snip = Math.floor(tick / 2) % 2 === 0;
+    for (let k = 0; k < n; k++) {
+      const d = ip - k;
+      let ch = k % 2 === 0 ? '-' : ' ', cls = '';
+      if (d === 0) { ch = snip ? '\u2702' : '\u2704'; cls = 's'; }          // scissors, blades open / shut
+      else if (d > 0 && d <= TRAIL) ch = ' ';                                // already cut away
+      else if (d > TRAIL && d <= TRAIL + HEAL) cls = 'h';                    // dashes growing back
       if (cells[k].textContent !== ch) cells[k].textContent = ch;
       if (cells[k].className !== cls) cells[k].className = cls;
     }
   }
-  frame();
+  build(); pos = Math.floor(n / 4); frame();
+  let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { build(); frame(); }, 150); });
   if (!matchMedia('(prefers-reduced-motion: reduce)').matches)
-    setInterval(() => { t += 0.07 * orbitSpeed; frame(); }, 80);
+    setInterval(() => {
+      tick++; pos += 0.5 * orbitSpeed;
+      if (pos - TRAIL - HEAL > n) pos = -2;
+      frame();
+    }, 80);
 })();
 
 loadBanners(); poll();
