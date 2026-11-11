@@ -12,12 +12,12 @@ Terminal-style UI, runs only on your own machine (`127.0.0.1:8765`). No API key 
 
 Open Claude Code in an empty folder and paste:
 
-> Clone `REPO_URL`, read its README.md and CLAUDE.md, run the setup, fix anything the setup checks complain about, and start the app. Never ask me to paste secrets into the chat.
+> Clone `https://github.com/kodik99/clip-tool`, read its README.md and CLAUDE.md, run the setup, fix anything the setup checks complain about, and start the app. Never ask me to paste secrets into the chat.
 
 ## Manual install
 
 ```bash
-git clone REPO_URL memeclip && cd memeclip
+git clone https://github.com/kodik99/clip-tool memeclip && cd memeclip
 ./setup.sh          # creates .venv, installs deps, checks ffmpeg + deno
 ./start.command     # opens http://127.0.0.1:8765
 ```
