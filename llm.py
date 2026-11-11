@@ -52,12 +52,15 @@ def pick_clips(sentences, n, min_len, max_len, desc_lang="", want_hook=False):
         raise RuntimeError("No Anthropic API key found. Run: python setkey.py")
     lines = "\n".join(f"[{s['i']}] {_mmss(s['start'])} {s['text']}" for s in sentences)
     lang = desc_lang.strip() or "the same language as the transcript"
+    want = min(2 * n, n + 6)          # ask for extra candidates: the app drops the ones that break its limits
     system = (
-        "You are a short-form video editor (TikTok / Instagram Reels). From a numbered transcript, choose the "
-        f"{n} best moments that work as standalone vertical clips. Rules: each clip starts on a strong hook and ends "
+        "You are a short-form video editor (TikTok / Instagram Reels). From a numbered transcript, list the "
+        f"{want} best candidate moments that work as standalone vertical clips, each with a score. The app keeps the best {n} "
+        f"that fit its limits, so give {want} candidates unless the transcript is too short to contain that many; decent "
+        "self-contained moments are fine. Rules: each clip starts on a strong hook and ends "
         f"on a finished thought or punchline; it must make sense without earlier context; length between {min_len} and "
         f"{max_len} seconds (use the mm:ss timestamps to measure); clips must not overlap; prefer funny, surprising, "
-        "emotional or insightful moments over small talk. Choose fewer than requested if there are not enough good ones. "
+        "emotional or insightful moments over small talk. "
         f"Write titles and post descriptions in {lang}. A description is 1-2 punchy sentences plus 3-5 relevant hashtags. "
         "Return your answer only via the submit_clips tool."
     )

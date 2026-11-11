@@ -148,7 +148,8 @@
 <fieldset style="margin-top:22px">
   <legend>output</legend>
   <div class="head"><button id="clear" type="button">clear all</button><span id="usage" class="dim small"></span></div>
-  <div id="jobs" class="dim">no jobs yet</div>
+  <div id="empty" class="dim">no jobs yet</div>
+  <div id="jobs"></div>
 </fieldset>
 
 <script>
@@ -229,11 +230,14 @@ $('run').onclick = async () => {
     fd.append('desc_lang', $('dlang').value);
   }
   $('run').disabled = true;
+  const pend = document.createElement('div'); pend.id = 'pending'; pend.className = 'job';
+  pend.textContent = '> sending ' + (picked ? picked.name : url) + ' ...';
+  $('jobs').prepend(pend); $('empty').style.display = 'none';
   try {
     const r = await fetch('/api/jobs', { method: 'POST', body: fd });
     if (!r.ok) { $('msg').textContent = (await r.json()).detail || 'failed'; }
     else { $('url').value = ''; setFile(null); poll(); }
-  } finally { $('run').disabled = false; }
+  } finally { pend.remove(); $('run').disabled = false; poll(); }
 };
 
 // clear all
@@ -247,7 +251,8 @@ $('clear').onclick = async () => {
   if (r.status === 409) { $('msg').textContent = 'wait for the running job to finish'; return; }
   const d = await r.json();
   for (const k of Object.keys(els)) { els[k].root.remove(); delete els[k]; }
-  $('jobs').className = 'dim'; $('jobs').textContent = 'cleared ' + fmt(d.freed);
+  emptyText = 'cleared ' + fmt(d.freed);
+  $('empty').textContent = emptyText; $('empty').style.display = '';
   usage();
 };
 
@@ -268,12 +273,15 @@ $('kill').onclick = async () => {
 // jobs
 function bar(p) { const n = Math.round(p / 5); return '[' + '#'.repeat(n) + '.'.repeat(20 - n) + '] ' + String(Math.round(p)).padStart(3) + '%'; }
 const els = {};
+let emptyText = 'no jobs yet';
 function render(list) {
   const box = $('jobs');
   const ids = new Set(list.map(j => j.id));
   for (const k of Object.keys(els)) if (!ids.has(k)) { els[k].root.remove(); delete els[k]; }
-  if (!list.length) { box.textContent = 'no jobs yet'; return; }
-  if (box.classList.contains('dim')) { box.classList.remove('dim'); box.textContent = ''; }
+  // "no jobs yet" only when the box is empty AND nothing is being sent or processed
+  if (list.length) emptyText = 'no jobs yet';
+  $('empty').textContent = emptyText;
+  $('empty').style.display = (list.length || $('pending')) ? 'none' : '';
   for (const j of list) {
     let e = els[j.id];
     if (!e) {

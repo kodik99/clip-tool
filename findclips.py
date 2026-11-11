@@ -27,13 +27,26 @@ def to_sentences(words, max_words=28, gap=0.9):
     return out
 
 def resolve(clips, sents, lo, total, n, min_len, max_len):
+    """Turn Claude's sentence ranges into clip times. Near misses are fixed instead of dropped:
+    too long -> cut sentences off the end (keeps the hook), too short -> pull in the following sentences."""
     by = {s["i"]: s for s in sents}
+    last = max(by) if by else -1
+    hi = max_len * 1.15
     ok = []
     for c in clips:
-        a, b = by.get(c.get("start_id")), by.get(c.get("end_id"))
-        if not a or not b or b["i"] < a["i"]:
+        try:
+            ia, ib = int(c.get("start_id")), int(c.get("end_id"))
+        except (TypeError, ValueError):
             continue
-        st, en = max(lo, a["start"] - 0.25), min(total, b["end"] + 0.4)
+        if ia > ib:
+            ia, ib = ib, ia
+        if ia not in by or ib not in by:
+            continue
+        while ib > ia and by[ib]["end"] - by[ia]["start"] > hi:
+            ib -= 1
+        while ib < last and by[ib]["end"] - by[ia]["start"] < min_len * 0.85 and by[ib + 1]["end"] - by[ia]["start"] <= hi:
+            ib += 1
+        st, en = max(lo, by[ia]["start"] - 0.25), min(total, by[ib]["end"] + 0.4)
         if not (min_len * 0.6 <= en - st <= max_len * 1.4):
             continue
         ok.append({**c, "start": st, "end": en})
