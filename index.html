@@ -6,7 +6,7 @@
 <title>clip</title>
 <style>
   :root {
-    --bg: #0c0c0c; --fg: #cfcfcf; --dim: #6b6b6b; --acc: #b6ff3c; --err: #ff5f56; --line: #262626;
+    --bg: #0c0c0c; --fg: #cfcfcf; --dim: #6b6b6b; --acc: #7dd02e; --err: #ff5f56; --line: #262626;
   }
   @media (prefers-color-scheme: light) {
     :root { --bg: #f4f4ef; --fg: #1c1c1c; --dim: #8a8a82; --acc: #2a6b00; --err: #c0281c; --line: #d6d6cc; }
@@ -58,10 +58,22 @@
   a { color: var(--acc); text-decoration: none; }
   a:hover { text-decoration: underline; }
   input[type=file] { display: none; }
+  header { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 6px; flex-wrap: wrap; }
+  header h1 { margin: 0; }
+  #orbit { display: grid; grid-template-columns: repeat(19, 1ch); grid-auto-rows: 1.12em; line-height: 1.12em;
+           user-select: none; font-size: 12px; }
+  #orbit i { font-style: normal; text-align: center; }
+  #orbit .r { color: var(--line); }
+  #orbit .b { color: var(--dim); }
+  #orbit .f { color: var(--acc); }
+  #orbit .c { color: var(--acc); font-weight: bold; }
 </style>
 </head>
 <body>
-<h1>$ clip <span class="dim">— link or file in, 9:16 + banner + captions out</span></h1>
+<header>
+  <h1>$ clip <span class="dim">— link or file in, 9:16 + banner + captions out</span></h1>
+  <div id="orbit" aria-hidden="true"></div>
+</header>
 
 <fieldset>
   <legend><b>1</b> source</legend>
@@ -264,8 +276,37 @@ async function poll() {
   let list = [];
   try { list = await (await fetch('/api/jobs')).json(); render(list); usage(); } catch (e) {}
   const busy = list.some(j => j.status === 'queued' || j.status === 'running');
+  orbitSpeed = busy ? 3 : 1;
   timer = setTimeout(poll, busy ? 1000 : 4000);
 }
+// ascii orbit: a "$" with currencies circling it (faster while a job runs)
+let orbitSpeed = 1;
+(function () {
+  const W = 19, H = 9, cx = 9, cy = 4, rx = 8, ry = 3.6;
+  const coins = ['€', '£', '¥', '₩', '₹', '₿'];
+  const el = $('orbit'), cells = [];
+  for (let k = 0; k < W * H; k++) { const c = document.createElement('i'); c.textContent = ' '; el.appendChild(c); cells.push(c); }
+  let t = 0;
+  function frame() {
+    const g = new Array(W * H).fill(null);
+    const put = (x, y, ch, cls) => { x = Math.round(x); y = Math.round(y); if (x >= 0 && x < W && y >= 0 && y < H) g[y * W + x] = [ch, cls]; };
+    for (let k = 0; k < 40; k++) { const a = k / 40 * 2 * Math.PI; put(cx + rx * Math.cos(a), cy + ry * Math.sin(a), '·', 'r'); }
+    coins.forEach((ch, i) => {
+      const a = t + i * 2 * Math.PI / coins.length;
+      put(cx + rx * Math.cos(a), cy + ry * Math.sin(a), ch, Math.sin(a) > 0 ? 'f' : 'b');   // lower half = in front
+    });
+    put(cx, cy, '$', 'c');
+    for (let k = 0; k < g.length; k++) {
+      const [ch, cls] = g[k] || [' ', ''];
+      if (cells[k].textContent !== ch) cells[k].textContent = ch;
+      if (cells[k].className !== cls) cells[k].className = cls;
+    }
+  }
+  frame();
+  if (!matchMedia('(prefers-reduced-motion: reduce)').matches)
+    setInterval(() => { t += 0.07 * orbitSpeed; frame(); }, 80);
+})();
+
 loadBanners(); poll();
 </script>
 </body>
