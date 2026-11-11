@@ -87,7 +87,8 @@ def main():
         sw_, sh_ = probe_size(a.input)
         try:
             crop = reframe.plan(FFMPEG, a.input, a.start if cut else 0.0, dur, sw_, sh_)
-            if crop: print(f"NOTE crop corrector: {crop['shots']} shot(s), faces found in {crop['with_faces']}", flush=True)
+            if crop: print(f"NOTE crop corrector: {crop['shots']} shot(s): face found in {crop['with_faces']}, "
+                                  f"same-angle reuse {crop['reused']}, centre fallback {crop['centred']}", flush=True)
         except Exception as e:      # never fail the render because of framing; fall back to a centre crop
             print(f"NOTE crop corrector skipped ({e})", flush=True)
     if a.captions:

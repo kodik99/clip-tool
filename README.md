@@ -36,8 +36,8 @@ Linux: `sudo apt install ffmpeg`.
 **Layouts:** *blur-fill* shows the whole video over a blurred copy of itself (nothing is cropped); *crop* zooms in to fill the
 screen and cuts off the sides.
 **Crop corrector** (shown for *crop*): instead of always cropping the dead centre, it finds faces and picks one fixed,
-face-safe crop position per camera shot (no panning). With two people it keeps one fully in frame. Shots where no face is
-found fall back to a centre crop. First use downloads a 0.2 MB MediaPipe face model into `models/`.
+face-safe crop position per camera shot (no panning). With two people it keeps one fully in frame. Small faces in wide two-shots are found by a tiled, higher-resolution scan; a shot with no
+face reuses the crop of a similar camera angle, else a centre crop. First use downloads a 0.2 MB MediaPipe face model into `models/`.
 
 Defaults (in `compose.py` flags): banner 65 % of frame width, bottom edge 280 px above the frame bottom,
 video block centred at y = 720 px of 1920, captions just above the banner. First run downloads the Whisper `small` model.
