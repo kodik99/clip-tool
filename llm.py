@@ -37,13 +37,14 @@ TOOL = {
             "title": {"type": "string", "description": "short hook, max 60 chars"},
             "description": {"type": "string", "description": "ready-to-post TikTok/Reels caption + 3-5 hashtags"},
             "reason": {"type": "string", "description": "one sentence: why this works as a standalone clip"},
+            "hook": {"type": "string", "description": "optional on-screen headline for the top of the video: max 55 characters, curiosity-driven, ending with 1-2 fitting emojis"},
             "score": {"type": "integer", "description": "1-10 virality/interest"},
         }, "required": ["start_id", "end_id", "title", "description", "reason", "score"]}}},
         "required": ["clips"],
     },
 }
 
-def pick_clips(sentences, n, min_len, max_len, desc_lang=""):
+def pick_clips(sentences, n, min_len, max_len, desc_lang="", want_hook=False):
     """Returns (clips, usage_dict). Sentences: [{i,start,end,text}]."""
     import anthropic
     key = get_key()
@@ -60,6 +61,10 @@ def pick_clips(sentences, n, min_len, max_len, desc_lang=""):
         f"Write titles and post descriptions in {lang}. A description is 1-2 punchy sentences plus 3-5 relevant hashtags. "
         "Return your answer only via the submit_clips tool."
     )
+    if want_hook:
+        system += (f" For every clip ALSO fill the hook field: a punchy on-screen headline shown at the top of the video "
+                   f"(max 55 characters, curiosity-driven or surprising, no hashtags, no quotation marks), ending with 1-2 emojis "
+                   f"that fit the topic, written in {lang}.")
     client = anthropic.Anthropic(api_key=key)
     user = f"Transcript ({_mmss(sentences[-1]['end'])} long):\n{lines}"
     ti = to = 0
@@ -85,3 +90,30 @@ def pick_clips(sentences, n, min_len, max_len, desc_lang=""):
     if clips is None:
         raise RuntimeError("Claude did not return clips")
     return clips, {"model": model, "in": ti, "out": to, "usd": (ti * PRICE_IN + to * PRICE_OUT) / 1e6}
+
+
+def make_hook(transcript, desc_lang=""):
+    """One small call: a single on-screen hook headline (with 1-2 emojis) for a whole short video. -> (text, usage)."""
+    import anthropic
+    key = get_key()
+    if not key:
+        raise RuntimeError("No Anthropic API key found. Run: python setkey.py")
+    lang = desc_lang.strip() or "the same language as the transcript"
+    system = ("You write on-screen hook headlines for short vertical videos (TikTok / Instagram Reels). From the transcript, write ONE "
+              "punchy headline for the top of the video: max 55 characters, curiosity-driven or surprising, no hashtags, no quotation "
+              f"marks, ending with 1-2 emojis that fit the topic. Write it in {lang}. Reply with the headline only.")
+    client = anthropic.Anthropic(api_key=key)
+    last = None
+    for model in MODELS:
+        try:
+            msg = client.messages.create(model=model, max_tokens=300, system=system,
+                                         messages=[{"role": "user", "content": transcript[:6000]}])
+            break
+        except anthropic.NotFoundError as e:
+            last = e
+    else:
+        raise RuntimeError(f"No usable Claude model found: {last}")
+    text = "".join(b.text for b in msg.content if b.type == "text").strip().strip('"\u201c\u201d\'')
+    text = " ".join(text.split())
+    ti, to = msg.usage.input_tokens, msg.usage.output_tokens
+    return text, {"model": model, "in": ti, "out": to, "usd": (ti * PRICE_IN + to * PRICE_OUT) / 1e6}

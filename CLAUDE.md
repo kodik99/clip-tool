@@ -35,6 +35,14 @@ Tuning facts (measured on a 2-person podcast): real faces score >=0.5, furniture
 Masked/balaclava faces are still not detected (they use the reuse / centre fallback). OpenCV 5 ships no Haar cascades.
 The NOTE line shows `face found in X, same-angle reuse Y, centre fallback Z` per render - check it when a crop looks wrong.
 
+## Hook headline (`hook.py`)
+`compose.py --hook "text"` draws an explicit headline; `--hook-auto` asks `llm.make_hook` (one small Claude call on the transcript);
+`findclips.py --hook` makes `llm.pick_clips(..., want_hook=True)` return a `hook` per clip (same call). The headline is a transparent
+PNG (Pillow: bold serif + colour emojis; prefers 2 balanced lines, auto-shrinks) overlaid as ffmpeg input #2 at y=170 (below the TikTok
+top UI). Blur layout: the video block is pushed down if needed so it never covers the hook. Crop layout / tall sources: the hook sits on
+the picture with a soft dark gradient. Libass cannot draw colour emojis, which is why this is an image and not an ASS subtitle.
+Fonts are the OS's (Georgia Bold + Apple Color Emoji on macOS); other systems fall back (see README). A failed hook never fails a render.
+
 ## Disk hygiene
 `run_job` deletes `jobs/<id>/` in a `finally` block (full downloaded video, audio.wav, words.json); only finished clips remain in `output/`.
 `jobs/` is also wiped on server start. Never keep full-length sources around.

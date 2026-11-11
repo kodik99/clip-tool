@@ -58,6 +58,7 @@ def main():
     ap.add_argument("--max-len", type=float, default=60)
     ap.add_argument("--desc-lang", default="")
     ap.add_argument("--caption-size", default="normal")
+    ap.add_argument("--hook", action=argparse.BooleanOptionalAction, default=False)
     ap.add_argument("--crop-fix", action=argparse.BooleanOptionalAction, default=False)
     a = ap.parse_args()
 
@@ -85,7 +86,7 @@ def main():
     emit("NOTE", f"{len(words)} words, {span / 60:.1f} min analysed (from {a.offset / 60:.1f}), language={lang}")
 
     emit("STAGE", "picking clips (claude)"); emit("PCT", "0")
-    clips, u = llm.pick_clips(sents, a.max_clips, a.min_len, a.max_len, a.desc_lang)
+    clips, u = llm.pick_clips(sents, a.max_clips, a.min_len, a.max_len, a.desc_lang, want_hook=a.hook)
     emit("NOTE", f"claude: {u['in']} tokens in, {u['out']} out = about ${u['usd']:.3f} ({u['model']})")
     chosen = resolve(clips, sents, a.offset, total, a.max_clips, a.min_len, a.max_len)
     if not chosen:
@@ -97,7 +98,8 @@ def main():
         f = out / f"clip_{k}.mp4"
         cmd = [sys.executable, str(HERE / "compose.py"), a.source, a.banner, str(f), "--layout", a.layout,
                "--start", f"{c['start']:.3f}", "--end", f"{c['end']:.3f}", "--words-json", str(wjson),
-               "--captions" if a.captions else "--no-captions", "--crop-fix" if a.crop_fix else "--no-crop-fix", "--caption-size", a.caption_size]
+               "--captions" if a.captions else "--no-captions", "--crop-fix" if a.crop_fix else "--no-crop-fix", "--caption-size", a.caption_size,
+               *(["--hook", c["hook"]] if a.hook and c.get("hook") else [])]
         p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         dur = c["end"] - c["start"]
         for line in p.stdout:
@@ -110,7 +112,7 @@ def main():
         if p.wait() != 0 or not f.exists():
             sys.exit(f"render of clip {k} failed")
         emit("CLIP", json.dumps({"file": str(f), "title": c.get("title", ""), "description": c.get("description", ""),
-                                  "reason": c.get("reason", ""), "start": round(c["start"], 1), "end": round(c["end"], 1)},
+                                  "reason": c.get("reason", ""), "hook": c.get("hook", "") if a.hook else "", "start": round(c["start"], 1), "end": round(c["end"], 1)},
                                  ensure_ascii=False))
 
 if __name__ == "__main__":

@@ -98,14 +98,14 @@ def run_job(jid):
             cmd = [sys.executable, str(HERE / "findclips.py"), str(src), str(BANNERS / o["banner"]), str(wd / "clips"),
                    "--layout", o["layout"], "--whisper-model", o["model"], "--max-clips", str(o["max_clips"]),
                    "--min-len", str(o["min_len"]), "--max-len", str(o["max_len"]), "--desc-lang", o["desc_lang"],
-                   "--captions" if o["captions"] else "--no-captions", "--crop-fix" if o.get("crop_fix") else "--no-crop-fix", "--caption-size", o["cap_size"]]
+                   "--captions" if o["captions"] else "--no-captions", "--crop-fix" if o.get("crop_fix") else "--no-crop-fix", "--caption-size", o["cap_size"], "--hook" if o.get("hook") else "--no-hook"]
             cmd += ["--offset", str(o.get("start_sec") or 0)]
             if o.get("end_sec"): cmd += ["--limit-sec", str(o["end_sec"] - (o.get("start_sec") or 0))]
         else:
             cmd = [sys.executable, str(HERE / "compose.py"), str(src), str(BANNERS / o["banner"]), str(wd / "out.mp4"),
                    "--layout", o["layout"], "--whisper-model", o["model"],
                    "--captions" if o["captions"] else "--no-captions", "--crop-fix" if o.get("crop_fix") else "--no-crop-fix",
-                   "--caption-size", o["cap_size"]]
+                   "--caption-size", o["cap_size"], "--hook-auto" if o.get("hook") else "--no-hook-auto", "--desc-lang", o["desc_lang"]]
         if o.get("language"): cmd += ["--language", o["language"]]
         p = _spawn(jid, cmd)
         dur = 0.0
@@ -177,7 +177,7 @@ async def upload_banner(file: UploadFile = File(...)):
 
 @app.post("/api/jobs")
 async def create_job(url: str = Form(""), banner: str = Form(...), layout: str = Form("blur"),
-                     captions: bool = Form(True), crop_fix: bool = Form(False), cap_size: str = Form("normal"), model: str = Form("small"), language: str = Form(""),
+                     captions: bool = Form(True), crop_fix: bool = Form(False), hook: bool = Form(False), cap_size: str = Form("normal"), model: str = Form("small"), language: str = Form(""),
                      mode: str = Form("whole"), t_from: str = Form(""), t_to: str = Form(""), max_clips: int = Form(5),
                      min_len: float = Form(15), max_len: float = Form(60), desc_lang: str = Form(""),
                      file: UploadFile | None = File(None)):
@@ -190,7 +190,7 @@ async def create_job(url: str = Form(""), banner: str = Form(...), layout: str =
     start_sec, end_sec = parse_time(t_from), parse_time(t_to)
     if end_sec is not None and end_sec <= (start_sec or 0): raise HTTPException(400, "'to' must be after 'from'")
     if end_sec is not None and end_sec - (start_sec or 0) > 4 * 3600: raise HTTPException(400, "range too long (max 4 h)")
-    opts = dict(banner=Path(banner).name, layout=layout, captions=captions, crop_fix=crop_fix and layout == "crop", cap_size=cap_size, model=model, language=language.strip(),
+    opts = dict(banner=Path(banner).name, layout=layout, captions=captions, crop_fix=crop_fix and layout == "crop", hook=hook, cap_size=cap_size, model=model, language=language.strip(),
                 mode=mode, start_sec=start_sec or 0, end_sec=end_sec, max_clips=max(1, min(max_clips, 10)),
                 min_len=max(5.0, min(min_len, 180.0)), max_len=max(10.0, min(max_len, 180.0)), desc_lang=desc_lang.strip()[:40])
     if file is not None and file.filename:

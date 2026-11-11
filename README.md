@@ -42,6 +42,14 @@ face reuses the crop of a similar camera angle, else a centre crop. First use do
 Defaults (in `compose.py` flags): banner 65 % of frame width, bottom edge 280 px above the frame bottom,
 video block centred at y = 720 px of 1920, captions just above the banner. First run downloads the Whisper `small` model.
 
+## Hook headline (optional, needs an API key)
+
+Tick **hook: headline on top** and Claude writes a short, catchy on-screen title (max ~55 characters) with 1-2 fitting emojis,
+in the video's language (or the *desc lang* you set), drawn at the top of the frame. In *find clips* mode it comes from the same Claude
+call as the title and description (almost free) and is on by default; in *whole video* mode it is one small extra call (about a tenth of a cent).
+The text and colour emojis are drawn as an image with Pillow. **Fonts:** Georgia Bold + Apple Color Emoji on macOS. On other systems it
+falls back to DejaVu Serif Bold / the bundled Anton, and emojis are skipped when no colour-emoji font (e.g. Noto Color Emoji) is installed.
+
 ## Find clips in long videos (needs an Anthropic API key)
 
 Pick **mode: find clips**. The tool transcribes the video (Whisper, local), asks Claude for the best standalone moments,

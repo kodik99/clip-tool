@@ -122,6 +122,11 @@
     <span class="pair"><span class="dim small">language</span>
     <input type="text" id="lang" placeholder="auto" title="optional language code, e.g. pt, en, es" style="flex:none;min-width:0;width:56px" maxlength="5"></span>
   </div>
+  <div class="row">
+    <label>hook</label>
+    <label class="opt"><input type="checkbox" id="hook"> headline on top</label>
+    <span class="dim small">ai writes a catchy title with emojis (needs api key)</span>
+  </div>
 </fieldset>
 
 <fieldset>
@@ -196,6 +201,7 @@ document.querySelectorAll('input[name=layout]').forEach(r => r.onchange = () => 
 document.querySelectorAll('input[name=mode]').forEach(r => r.onchange = () => {
   const clips = document.querySelector('input[name=mode]:checked').value === 'clips';
   $('clipopts').style.display = clips ? '' : 'none';
+  $('hook').checked = clips;               // find clips: headline on by default (same Claude call); whole video: off
 });
 
 // run
@@ -212,6 +218,7 @@ $('run').onclick = async () => {
   fd.append('captions', $('caps').checked ? 'true' : 'false');
   fd.append('crop_fix', $('cfix').checked ? 'true' : 'false');
   fd.append('cap_size', $('capsize').value);
+  fd.append('hook', $('hook').checked ? 'true' : 'false');
   fd.append('model', $('model').value);
   fd.append('language', $('lang').value);
   const mode = document.querySelector('input[name=mode]:checked').value;
@@ -291,6 +298,7 @@ function render(list) {
           const v = document.createElement('video'); v.controls = true; v.src = '/out/' + o.file; v.preload = 'metadata';
           const a = document.createElement('a'); a.href = '/out/' + o.file + '?dl=1'; a.textContent = 'download ' + o.file;
           box.append(v, a);
+          if (o.hook) { const k = document.createElement('div'); k.className = 'dim small'; k.textContent = 'hook: ' + o.hook; box.append(k); }
           if (o.description) {
             const d = document.createElement('div'); d.style.cssText = 'margin-top:6px;white-space:pre-wrap'; d.textContent = o.description;
             const c = document.createElement('button'); c.textContent = 'copy description'; c.style.marginTop = '4px';
