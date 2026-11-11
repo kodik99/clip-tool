@@ -97,7 +97,6 @@
     <label>layout</label>
     <label class="opt"><input type="radio" name="layout" value="blur" checked> blur-fill</label>
     <label class="opt"><input type="radio" name="layout" value="crop"> crop</label>
-    <label class="opt"><input type="radio" name="layout" value="fit"> fit</label>
   </div>
   <div class="row" id="cropfix" style="display:none">
     <label></label>
@@ -112,6 +111,7 @@
       <option value="tiny">tiny</option><option value="base">base</option>
       <option value="small" selected>small</option><option value="medium">medium</option>
     </select>
+    <select id="capsize"><option value="normal">normal text</option><option value="large">large text</option></select>
     <input type="text" id="lang" placeholder="lang (auto)" style="flex:none;min-width:0;width:100px" maxlength="5">
   </div>
 </fieldset>
@@ -175,7 +175,7 @@ $('bfile').onchange = async e => {
 };
 
 // layout hints + crop corrector toggle
-const HINTS = { blur: 'blur-fill: whole video, blurred copy behind it', crop: 'crop: zooms in to fill the screen, the sides are cut off', fit: 'fit: whole video, plain black bars above and below' };
+const HINTS = { blur: 'blur-fill: whole video, blurred copy behind it', crop: 'crop: zooms in to fill the screen, the sides are cut off' };
 document.querySelectorAll('input[name=layout]').forEach(r => r.onchange = () => {
   const v = document.querySelector('input[name=layout]:checked').value;
   $('layouthint').textContent = HINTS[v]; $('cropfix').style.display = v === 'crop' ? '' : 'none';
@@ -200,6 +200,7 @@ $('run').onclick = async () => {
   fd.append('layout', document.querySelector('input[name=layout]:checked').value);
   fd.append('captions', $('caps').checked ? 'true' : 'false');
   fd.append('crop_fix', $('cfix').checked ? 'true' : 'false');
+  fd.append('cap_size', $('capsize').value);
   fd.append('model', $('model').value);
   fd.append('language', $('lang').value);
   const mode = document.querySelector('input[name=mode]:checked').value;

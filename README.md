@@ -2,7 +2,7 @@
 
 Local web tool: paste a video link (or drop a file) and get a **9:16 vertical clip** for TikTok / Reels with
 
-- a **blurred-fill background** (or crop / fit),
+- a **blurred-fill background** (or crop),
 - **burned-in captions** (Whisper, runs offline),
 - your **looping banner mp4** across the whole clip, placed above the TikTok UI zone.
 
@@ -34,7 +34,7 @@ Linux: `sudo apt install ffmpeg`.
 3. Download the result. **clear all** deletes every generated video and working file (banners are kept).
 
 **Layouts:** *blur-fill* shows the whole video over a blurred copy of itself (nothing is cropped); *crop* zooms in to fill the
-screen and cuts off the sides; *fit* shows the whole video with plain black bars above and below.
+screen and cuts off the sides.
 **Crop corrector** (shown for *crop*): instead of always cropping the dead centre, it finds faces and picks one fixed,
 face-safe crop position per camera shot (no panning). With two people it keeps one fully in frame. Shots where no face is
 found fall back to a centre crop. First use downloads a 0.2 MB MediaPipe face model into `models/`.

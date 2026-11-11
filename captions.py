@@ -38,14 +38,14 @@ def chunk(words, max_words=3, max_chars=22, gap=0.6):
     if cur: out.append(cur)
     return out
 
-def write_ass(words, path, W=1080, H=1920, bottom_y=1320, font="Anton", size=92, upper=True):
+def write_ass(words, path, W=1080, H=1920, bottom_y=1320, font="Anton", size=92, upper=True, outline=7, max_chars=22, max_words=3):
     marginv = H - bottom_y
     head = (f"[Script Info]\nScriptType: v4.00+\nPlayResX: {W}\nPlayResY: {H}\nWrapStyle: 2\n\n"
             f"[V4+ Styles]\nFormat: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour,Bold,Italic,Underline,StrikeOut,ScaleX,ScaleY,Spacing,Angle,BorderStyle,Outline,Shadow,Alignment,MarginL,MarginR,MarginV,Encoding\n"
-            f"Style: Default,{font},{size},&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,7,2,2,60,60,{marginv},1\n\n"
+            f"Style: Default,{font},{size},&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,{outline},2,2,60,60,{marginv},1\n\n"
             f"[Events]\nFormat: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text\n")
     lines = []
-    chunks = chunk(words)
+    chunks = chunk(words, max_words=max_words, max_chars=max_chars)
     for i, c in enumerate(chunks):
         start = c[0][0]
         end = chunks[i + 1][0][0] if i + 1 < len(chunks) and chunks[i + 1][0][0] - c[-1][1] < 0.4 else c[-1][1] + 0.15

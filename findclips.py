@@ -57,6 +57,7 @@ def main():
     ap.add_argument("--min-len", type=float, default=15)
     ap.add_argument("--max-len", type=float, default=60)
     ap.add_argument("--desc-lang", default="")
+    ap.add_argument("--caption-size", default="normal")
     ap.add_argument("--crop-fix", action=argparse.BooleanOptionalAction, default=False)
     a = ap.parse_args()
 
@@ -96,7 +97,7 @@ def main():
         f = out / f"clip_{k}.mp4"
         cmd = [sys.executable, str(HERE / "compose.py"), a.source, a.banner, str(f), "--layout", a.layout,
                "--start", f"{c['start']:.3f}", "--end", f"{c['end']:.3f}", "--words-json", str(wjson),
-               "--captions" if a.captions else "--no-captions", "--crop-fix" if a.crop_fix else "--no-crop-fix"]
+               "--captions" if a.captions else "--no-captions", "--crop-fix" if a.crop_fix else "--no-crop-fix", "--caption-size", a.caption_size]
         p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         dur = c["end"] - c["start"]
         for line in p.stdout:
@@ -104,7 +105,7 @@ def main():
             if line.startswith("out_time_us="):
                 try: emit("PCT", f"{min(99.0, ((k - 1) + int(line.split('=')[1]) / 1e6 / dur) / len(chosen) * 100):.1f}")
                 except ValueError: pass
-            elif line and "=" not in line and not line.startswith(("STAGE", "DURATION")) and not re.search(r"warn|tip:|^INFO:|^[IWE]\d{4} ", line, re.I):
+            elif line and "=" not in line and not line.startswith(("STAGE", "DURATION")) and not re.search(r"warn|tip:|^INFO:|^[IWE]\d{4} |^objc\[", line, re.I):
                 print(line, flush=True)
         if p.wait() != 0 or not f.exists():
             sys.exit(f"render of clip {k} failed")

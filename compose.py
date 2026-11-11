@@ -20,6 +20,10 @@ FFMPEG = _find("ffmpeg")
 FFPROBE = _find("ffprobe")
 FONTS = str(HERE / "fonts")
 W, H = 1080, 1920
+CAPTION_STYLES = {   # font size / outline in px on the 1080x1920 frame; shorter lines for the big text
+    "normal": dict(size=92, outline=7, max_chars=22, max_words=3),
+    "large": dict(size=128, outline=9, max_chars=15, max_words=2),
+}
 
 def probe_size(path):
     out = subprocess.check_output([FFPROBE, "-v", "error", "-select_streams", "v:0", "-show_entries",
@@ -43,9 +47,6 @@ def build_filter(layout, bw, banner_y, video_cy, ass=None, crop=None):
         main = f"[0:v]crop={crop['cw']}:{crop['ch']}:x='{reframe.x_expr(crop['segs'])}':y=0,scale={W}:{H}[base]"
     elif layout == "crop":
         main = f"[0:v]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H}[base]"
-    else:
-        main = (f"[0:v]scale={W}:{H}:force_original_aspect_ratio=decrease,"
-                f"pad={W}:{H}:(ow-iw)/2:{video_cy}-ih/2:black[base]")
     cur = "base"
     if ass:
         esc = ass.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
@@ -56,11 +57,12 @@ def build_filter(layout, bw, banner_y, video_cy, ass=None, crop=None):
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("input"); p.add_argument("banner"); p.add_argument("output")
-    p.add_argument("--layout", choices=["blur", "crop", "fit"], default="blur")
+    p.add_argument("--layout", choices=["blur", "crop"], default="blur")
     p.add_argument("--banner-scale", type=float, default=0.65, help="banner width / frame width")
     p.add_argument("--banner-bottom", type=int, default=280, help="px from banner bottom to frame bottom")
-    p.add_argument("--video-center-y", type=int, default=720, help="vertical centre of the video block (blur/fit)")
+    p.add_argument("--video-center-y", type=int, default=720, help="vertical centre of the video block (blur)")
     p.add_argument("--captions", action=argparse.BooleanOptionalAction, default=True)
+    p.add_argument("--caption-size", choices=["normal", "large"], default="normal")
     p.add_argument("--whisper-model", default="small")
     p.add_argument("--language", default=None)
     p.add_argument("--start", type=float, default=None, help="cut: start second in the input")
@@ -99,7 +101,7 @@ def main():
             words, lang = captions.transcribe_words(a.input, a.whisper_model, a.language)
         if words:
             ass = str(Path(a.output).with_suffix(".ass"))
-            n = captions.write_ass(words, ass, W, H, bottom_y=banner_y - 40)
+            n = captions.write_ass(words, ass, W, H, bottom_y=banner_y - 40, **CAPTION_STYLES[a.caption_size])
             print(f"captions: {n} lines, language={lang}", file=sys.stderr)
         else:
             print("captions: no speech detected", file=sys.stderr)

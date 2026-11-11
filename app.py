@@ -98,13 +98,14 @@ def run_job(jid):
             cmd = [sys.executable, str(HERE / "findclips.py"), str(src), str(BANNERS / o["banner"]), str(wd / "clips"),
                    "--layout", o["layout"], "--whisper-model", o["model"], "--max-clips", str(o["max_clips"]),
                    "--min-len", str(o["min_len"]), "--max-len", str(o["max_len"]), "--desc-lang", o["desc_lang"],
-                   "--captions" if o["captions"] else "--no-captions", "--crop-fix" if o.get("crop_fix") else "--no-crop-fix"]
+                   "--captions" if o["captions"] else "--no-captions", "--crop-fix" if o.get("crop_fix") else "--no-crop-fix", "--caption-size", o["cap_size"]]
             cmd += ["--offset", str(o.get("start_sec") or 0)]
             if o.get("end_sec"): cmd += ["--limit-sec", str(o["end_sec"] - (o.get("start_sec") or 0))]
         else:
             cmd = [sys.executable, str(HERE / "compose.py"), str(src), str(BANNERS / o["banner"]), str(wd / "out.mp4"),
                    "--layout", o["layout"], "--whisper-model", o["model"],
-                   "--captions" if o["captions"] else "--no-captions", "--crop-fix" if o.get("crop_fix") else "--no-crop-fix"]
+                   "--captions" if o["captions"] else "--no-captions", "--crop-fix" if o.get("crop_fix") else "--no-crop-fix",
+                   "--caption-size", o["cap_size"]]
         if o.get("language"): cmd += ["--language", o["language"]]
         p = _spawn(jid, cmd)
         dur = 0.0
@@ -126,7 +127,7 @@ def run_job(jid):
             elif "=" in line and line.split("=")[0] in ("frame", "fps", "stream_0_0_q", "bitrate", "total_size", "out_time", "out_time_ms",
                                                          "dup_frames", "drop_frames", "speed", "progress"):
                 pass
-            elif not re.search(r"warn|tip:|^INFO:|^[IWE]\d{4} ", line, re.I): log(job, line)
+            elif not re.search(r"warn|tip:|^INFO:|^[IWE]\d{4} |^objc\[", line, re.I): log(job, line)
         if job.get("cancelled"): raise RuntimeError("killed")
         if p.wait() != 0:
             raise RuntimeError("clip finder failed" if o["mode"] == "clips" else "render failed")
@@ -176,19 +177,20 @@ async def upload_banner(file: UploadFile = File(...)):
 
 @app.post("/api/jobs")
 async def create_job(url: str = Form(""), banner: str = Form(...), layout: str = Form("blur"),
-                     captions: bool = Form(True), crop_fix: bool = Form(False), model: str = Form("small"), language: str = Form(""),
+                     captions: bool = Form(True), crop_fix: bool = Form(False), cap_size: str = Form("normal"), model: str = Form("small"), language: str = Form(""),
                      mode: str = Form("whole"), t_from: str = Form(""), t_to: str = Form(""), max_clips: int = Form(5),
                      min_len: float = Form(15), max_len: float = Form(60), desc_lang: str = Form(""),
                      file: UploadFile | None = File(None)):
     if mode not in ("whole", "clips"): raise HTTPException(400, "bad mode")
-    if layout not in ("blur", "crop", "fit"): raise HTTPException(400, "bad layout")
+    if layout not in ("blur", "crop"): raise HTTPException(400, "bad layout")
+    if cap_size not in ("normal", "large"): raise HTTPException(400, "bad caption size")
     if model not in ("tiny", "base", "small", "medium"): raise HTTPException(400, "bad model")
     if not (BANNERS / Path(banner).name).exists(): raise HTTPException(400, "banner not found")
     jid = uuid.uuid4().hex[:8]
     start_sec, end_sec = parse_time(t_from), parse_time(t_to)
     if end_sec is not None and end_sec <= (start_sec or 0): raise HTTPException(400, "'to' must be after 'from'")
     if end_sec is not None and end_sec - (start_sec or 0) > 4 * 3600: raise HTTPException(400, "range too long (max 4 h)")
-    opts = dict(banner=Path(banner).name, layout=layout, captions=captions, crop_fix=crop_fix and layout == "crop", model=model, language=language.strip(),
+    opts = dict(banner=Path(banner).name, layout=layout, captions=captions, crop_fix=crop_fix and layout == "crop", cap_size=cap_size, model=model, language=language.strip(),
                 mode=mode, start_sec=start_sec or 0, end_sec=end_sec, max_clips=max(1, min(max_clips, 10)),
                 min_len=max(5.0, min(min_len, 180.0)), max_len=max(10.0, min(max_len, 180.0)), desc_lang=desc_lang.strip()[:40])
     if file is not None and file.filename:

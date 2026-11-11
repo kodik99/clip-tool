@@ -1,7 +1,7 @@
 # memeclip — notes for Claude Code
 
 Local FastAPI app (`app.py`) + single-page UI (`index.html`). Pipeline per job: yt-dlp download (or upload) ->
-`compose.py` (faster-whisper captions via `captions.py` -> ASS file -> one ffmpeg filter graph: blur-fill/crop/fit +
+`compose.py` (faster-whisper captions via `captions.py` -> ASS file -> one ffmpeg filter graph: blur-fill/crop +
 looping banner overlay). Jobs run one at a time in a worker thread; state is in memory; output in `output/`, scratch in `jobs/`.
 
 ## Setup / run
