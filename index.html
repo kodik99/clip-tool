@@ -28,6 +28,8 @@
   }
   input[type=text] { flex: 1; min-width: 200px; }
   input[type=text]:focus, select:focus { border-bottom-color: var(--acc); }
+  input::placeholder { color: var(--dim); opacity: .5; }          /* hint text: clearly fainter than what you type */
+  input:focus::placeholder { opacity: .3; }
   select option { background: var(--bg); color: var(--fg); }
   label.opt { cursor: pointer; margin-right: 8px; }
   input[type=radio], input[type=checkbox] { accent-color: var(--acc); }
