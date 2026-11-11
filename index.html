@@ -49,6 +49,7 @@
   .row > label.opt:first-child { width: auto; color: var(--fg); margin-right: 4px; }
   .sub { margin: 2px 0 6px 22px; padding: 2px 0 2px 14px; border-left: 1px solid var(--line); }
   .small { font-size: 12px; }
+  .pair { white-space: nowrap; display: inline-flex; gap: 6px; align-items: baseline; }
   .head { display: flex; gap: 10px; align-items: baseline; margin: 2px 0 12px; }
   .job { margin: 0 0 18px; }
   .job .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -106,12 +107,20 @@
   <div class="row">
     <label>captions</label>
     <label class="opt"><input type="checkbox" id="caps" checked> on</label>
-    <select id="model">
-      <option value="tiny">tiny</option><option value="base">base</option>
-      <option value="small" selected>small</option><option value="medium">medium</option>
-    </select>
-    <select id="capsize"><option value="normal">normal text</option><option value="large">large text</option></select>
-    <input type="text" id="lang" placeholder="lang (auto)" style="flex:none;min-width:0;width:100px" maxlength="5">
+  </div>
+  <div class="row" id="capopts">
+    <label></label>
+    <span class="pair"><span class="dim small">size</span>
+    <select id="capsize" title="how big the subtitle text is">
+      <option value="normal">normal</option><option value="large">large</option>
+    </select></span>
+    <span class="pair"><span class="dim small">accuracy</span>
+    <select id="model" title="speech recognition quality: better is slower">
+      <option value="tiny">fastest</option><option value="base">fast</option>
+      <option value="small" selected>balanced</option><option value="medium">best (slow)</option>
+    </select></span>
+    <span class="pair"><span class="dim small">language</span>
+    <input type="text" id="lang" placeholder="auto" title="optional language code, e.g. pt, en, es" style="flex:none;min-width:0;width:56px" maxlength="5"></span>
   </div>
 </fieldset>
 
@@ -172,6 +181,9 @@ $('bfile').onchange = async e => {
   if (r.ok) loadBanners((await r.json()).name); else $('msg').textContent = 'banner upload failed';
   e.target.value = '';
 };
+
+// grey out the caption options when captions are off
+$('caps').onchange = () => { $('capopts').style.opacity = $('caps').checked ? '' : '.35'; $('capopts').querySelectorAll('select,input').forEach(e => e.disabled = !$('caps').checked); };
 
 // layout hints + crop corrector toggle
 const HINTS = { blur: 'blur-fill: whole video, blurred copy behind it', crop: 'crop: zooms in to fill the screen, the sides are cut off' };
