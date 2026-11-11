@@ -23,6 +23,17 @@ def _ffmpeg_dir() -> str:
     found = _sh.which("ffmpeg", path=ENV["PATH"])
     return str(Path(found).parent) if found else ""
 
+def parse_time(s: str):
+    """'' -> None; '20' -> 20 min; 'm:ss' or 'h:mm:ss' -> seconds."""
+    s = s.strip()
+    if not s: return None
+    try: n = [float(p) for p in s.split(":")]
+    except ValueError: raise HTTPException(400, f"bad time '{s}' (use 20, 12:30 or 1:05:30)")
+    if len(n) == 1: return n[0] * 60
+    if len(n) == 2: return n[0] * 60 + n[1]
+    if len(n) == 3: return n[0] * 3600 + n[1] * 60 + n[2]
+    raise HTTPException(400, f"bad time '{s}'")
+
 def safe_name(name: str) -> str:
     name = Path(name).name
     return re.sub(r"[^\w.\- ]", "_", name) or "file"
@@ -44,7 +55,8 @@ def run_job(jid):
             job["stage"], job["pct"] = "downloading", 0
             cmd = [sys.executable, "-m", "yt_dlp", "--no-playlist", "--newline", "--ffmpeg-location", _ffmpeg_dir(),
                    "-f", "bv*[height<=1080]+ba/b", "--merge-output-format", "mp4",
-                   *(["--download-sections", f"*0-{int(o['limit_min'] * 60)}"] if o.get("limit_min") else []),
+                   *(["--download-sections", f"*{int(o['start_sec'])}-{int(o['end_sec']) if o.get('end_sec') else 'inf'}"]
+                     if o.get("start_sec") or o.get("end_sec") else []),
                    "-o", str(wd / "source.%(ext)s"), o["url"]]
             p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=ENV)
             for line in p.stdout:
@@ -58,7 +70,9 @@ def run_job(jid):
                    "--layout", o["layout"], "--whisper-model", o["model"], "--max-clips", str(o["max_clips"]),
                    "--min-len", str(o["min_len"]), "--max-len", str(o["max_len"]), "--desc-lang", o["desc_lang"],
                    "--captions" if o["captions"] else "--no-captions"]
-            if o.get("limit_min"): cmd += ["--limit-sec", str(int(o["limit_min"] * 60))]
+            if o.get("upload"):  # a downloaded URL is already trimmed to the range; an uploaded file is cut inside findclips
+                cmd += ["--offset", str(o.get("start_sec") or 0)]
+                if o.get("end_sec"): cmd += ["--limit-sec", str(o["end_sec"] - (o.get("start_sec") or 0))]
         else:
             cmd = [sys.executable, str(HERE / "compose.py"), str(src), str(BANNERS / o["banner"]), str(wd / "out.mp4"),
                    "--layout", o["layout"], "--whisper-model", o["model"],
@@ -74,7 +88,10 @@ def run_job(jid):
             elif line.startswith("PCT "): job["pct"] = float(line[4:])
             elif line.startswith("NOTE "): job["note"] = (job["note"] + "\n" + line[5:]).strip()
             elif line.startswith("CLIP "):
-                c = json.loads(line[5:]); final = f"{jid}_{len(job['outputs']) + 1}.mp4"
+                c = json.loads(line[5:])
+                if not o.get("upload"):  # show times as in the original video
+                    c["start"] = round(c["start"] + (o.get("start_sec") or 0), 1); c["end"] = round(c["end"] + (o.get("start_sec") or 0), 1)
+                final = f"{jid}_{len(job['outputs']) + 1}.mp4"
                 shutil.move(c["file"], OUTPUT / final)
                 job["outputs"].append({**c, "file": final})
             elif line.startswith("out_time_us=") and dur:
@@ -123,7 +140,7 @@ async def upload_banner(file: UploadFile = File(...)):
 @app.post("/api/jobs")
 async def create_job(url: str = Form(""), banner: str = Form(...), layout: str = Form("blur"),
                      captions: bool = Form(True), model: str = Form("small"), language: str = Form(""),
-                     mode: str = Form("whole"), limit_min: float = Form(0), max_clips: int = Form(5),
+                     mode: str = Form("whole"), t_from: str = Form(""), t_to: str = Form(""), max_clips: int = Form(5),
                      min_len: float = Form(15), max_len: float = Form(60), desc_lang: str = Form(""),
                      file: UploadFile | None = File(None)):
     if mode not in ("whole", "clips"): raise HTTPException(400, "bad mode")
@@ -131,8 +148,11 @@ async def create_job(url: str = Form(""), banner: str = Form(...), layout: str =
     if model not in ("tiny", "base", "small", "medium"): raise HTTPException(400, "bad model")
     if not (BANNERS / Path(banner).name).exists(): raise HTTPException(400, "banner not found")
     jid = uuid.uuid4().hex[:8]
+    start_sec, end_sec = parse_time(t_from), parse_time(t_to)
+    if end_sec is not None and end_sec <= (start_sec or 0): raise HTTPException(400, "'to' must be after 'from'")
+    if end_sec is not None and end_sec - (start_sec or 0) > 4 * 3600: raise HTTPException(400, "range too long (max 4 h)")
     opts = dict(banner=Path(banner).name, layout=layout, captions=captions, model=model, language=language.strip(),
-                mode=mode, limit_min=max(0.0, min(limit_min, 600.0)), max_clips=max(1, min(max_clips, 10)),
+                mode=mode, start_sec=start_sec or 0, end_sec=end_sec, max_clips=max(1, min(max_clips, 10)),
                 min_len=max(5.0, min(min_len, 180.0)), max_len=max(10.0, min(max_len, 180.0)), desc_lang=desc_lang.strip()[:40])
     if file is not None and file.filename:
         wd = JOBS_DIR / jid; wd.mkdir(exist_ok=True)

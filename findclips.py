@@ -26,14 +26,14 @@ def to_sentences(words, max_words=28, gap=0.9):
     flush()
     return out
 
-def resolve(clips, sents, total, n, min_len, max_len):
+def resolve(clips, sents, lo, total, n, min_len, max_len):
     by = {s["i"]: s for s in sents}
     ok = []
     for c in clips:
         a, b = by.get(c.get("start_id")), by.get(c.get("end_id"))
         if not a or not b or b["i"] < a["i"]:
             continue
-        st, en = max(0.0, a["start"] - 0.25), min(total, b["end"] + 0.4)
+        st, en = max(lo, a["start"] - 0.25), min(total, b["end"] + 0.4)
         if not (min_len * 0.6 <= en - st <= max_len * 1.4):
             continue
         ok.append({**c, "start": st, "end": en})
@@ -51,7 +51,8 @@ def main():
     ap.add_argument("--captions", action=argparse.BooleanOptionalAction, default=True)
     ap.add_argument("--whisper-model", default="small")
     ap.add_argument("--language", default=None)
-    ap.add_argument("--limit-sec", type=float, default=0, help="only look at the first N seconds (0 = all)")
+    ap.add_argument("--offset", type=float, default=0, help="start second of the range to analyse")
+    ap.add_argument("--limit-sec", type=float, default=0, help="length of the range in seconds (0 = to the end)")
     ap.add_argument("--max-clips", type=int, default=5)
     ap.add_argument("--min-len", type=float, default=15)
     ap.add_argument("--max-len", type=float, default=60)
@@ -64,25 +65,27 @@ def main():
 
     emit("STAGE", "extracting audio")
     wav = out / "audio.wav"
-    subprocess.run([FFMPEG, "-y", "-loglevel", "error", "-i", a.source,
+    subprocess.run([FFMPEG, "-y", "-loglevel", "error", *(["-ss", str(a.offset)] if a.offset else []), "-i", a.source,
                     *(["-t", str(a.limit_sec)] if a.limit_sec else []),
                     "-vn", "-ac", "1", "-ar", "16000", str(wav)], check=True)
-    total = probe_duration(str(wav))
+    span = probe_duration(str(wav))
+    total = a.offset + span          # all times below are in source-video seconds
 
     emit("STAGE", "transcribing")
     words, lang = captions.transcribe_words(str(wav), a.whisper_model, a.language,
-                                            on_progress=lambda t: emit("PCT", f"{min(99.0, t / total * 100):.1f}"))
+                                            on_progress=lambda t: emit("PCT", f"{min(99.0, t / span * 100):.1f}"))
     if not words:
         sys.exit("no speech found in this video")
+    words = [(s + a.offset, e + a.offset, t) for s, e, t in words]
     wjson = out / "words.json"
     captions.save_words(words, lang, wjson)
     sents = to_sentences(words)
-    emit("NOTE", f"{len(words)} words, {total / 60:.1f} min analysed, language={lang}")
+    emit("NOTE", f"{len(words)} words, {span / 60:.1f} min analysed (from {a.offset / 60:.1f}), language={lang}")
 
     emit("STAGE", "picking clips (claude)"); emit("PCT", "0")
     clips, u = llm.pick_clips(sents, a.max_clips, a.min_len, a.max_len, a.desc_lang)
     emit("NOTE", f"claude: {u['in']} tokens in, {u['out']} out = about ${u['usd']:.3f} ({u['model']})")
-    chosen = resolve(clips, sents, total, a.max_clips, a.min_len, a.max_len)
+    chosen = resolve(clips, sents, a.offset, total, a.max_clips, a.min_len, a.max_len)
     if not chosen:
         sys.exit("claude found no clips that fit the length limits")
     (out / "clips.json").write_text(json.dumps(chosen, ensure_ascii=False, indent=1), encoding="utf-8")

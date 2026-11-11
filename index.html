@@ -86,7 +86,7 @@
 
 <div class="row" id="clipopts" style="display:none">
   <label>clips</label>
-  <span>first <input type="text" id="limit" value="" placeholder="all" style="flex:none;min-width:0;width:48px"> min</span>
+  <span>from <input type="text" id="tfrom" placeholder="0:00" style="flex:none;min-width:0;width:64px"> to <input type="text" id="tto" placeholder="end" style="flex:none;min-width:0;width:64px"></span>
   <span>max <input type="text" id="nclips" value="5" style="flex:none;min-width:0;width:34px"> clips</span>
   <span>length <input type="text" id="minlen" value="15" style="flex:none;min-width:0;width:34px">-<input type="text" id="maxlen" value="60" style="flex:none;min-width:0;width:34px"> s</span>
   <span>desc lang <input type="text" id="dlang" placeholder="same as video" style="flex:none;min-width:0;width:120px"></span>
@@ -169,7 +169,7 @@ $('run').onclick = async () => {
   const mode = document.querySelector('input[name=mode]:checked').value;
   fd.append('mode', mode);
   if (mode === 'clips') {
-    fd.append('limit_min', $('limit').value || '0'); fd.append('max_clips', $('nclips').value || '5');
+    fd.append('t_from', $('tfrom').value); fd.append('t_to', $('tto').value); fd.append('max_clips', $('nclips').value || '5');
     fd.append('min_len', $('minlen').value || '15'); fd.append('max_len', $('maxlen').value || '60');
     fd.append('desc_lang', $('dlang').value);
   }

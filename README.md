@@ -42,7 +42,7 @@ Pick **mode: find clips**. The tool transcribes the video (Whisper, local), asks
 renders each as a captioned 9:16 clip with your banner, and writes a **post description + hashtags** for each one
 (shown under the clip with a copy button).
 
-- **first N min**: only download/analyse the first N minutes (saves time and money). Blank = whole video.
+- **from / to**: only download and analyse that part of the video (saves time and money), e.g. `10:00` to `30:00`. Plain numbers mean minutes, `1:05:30` also works. Blank = start / end of the video.
 - **max clips / length**: how many clips and how long each may be (seconds).
 - **desc lang**: language for titles/descriptions (default: same as the video).
 - Cost is shown per job. Roughly a few US cents for a 20-minute podcast with a Sonnet-class model.
