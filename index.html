@@ -6,10 +6,10 @@
 <title>clip</title>
 <style>
   :root {
-    --bg: #0c0c0c; --fg: #cfcfcf; --dim: #6b6b6b; --acc: #7dd02e; --err: #ff5f56; --line: #262626;
+    --bg: #0c0c0c; --fg: #cfcfcf; --dim: #6b6b6b; --acc: #7dd02e; --err: #ff5f56; --red: #e0524a; --line: #262626;
   }
   @media (prefers-color-scheme: light) {
-    :root { --bg: #f4f4ef; --fg: #1c1c1c; --dim: #8a8a82; --acc: #2a6b00; --err: #c0281c; --line: #d6d6cc; }
+    :root { --bg: #f4f4ef; --fg: #1c1c1c; --dim: #8a8a82; --acc: #2a6b00; --err: #c0281c; --red: #c0281c; --line: #d6d6cc; }
   }
   * { box-sizing: border-box; }
   html { background: var(--bg); }
@@ -37,6 +37,8 @@
   }
   button:hover, .btn:hover { border-color: var(--acc); color: var(--acc); }
   button.go { color: var(--acc); border-color: var(--acc); margin-top: 10px; }
+  button.kill { color: var(--red); border-color: var(--red); margin-top: 0; }
+  button.kill:hover { background: var(--red); color: var(--bg); border-color: var(--red); }
   button:disabled { opacity: .4; cursor: default; }
   #drop { border: 1px dashed var(--line); padding: 6px 12px; color: var(--dim); cursor: pointer; flex: 1; min-width: 180px; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #drop.over { border-color: var(--acc); color: var(--acc); }
@@ -124,7 +126,7 @@
   </div>
 </fieldset>
 
-<div class="row" style="margin:14px 0 0"><button class="go" id="run" style="margin-top:0">run &gt;</button><span id="msg" class="err"></span></div>
+<div class="row" style="margin:14px 0 0"><button class="go" id="run" style="margin-top:0">run &gt;</button><button class="kill" id="kill" type="button" title="stop the current job and delete all of its files">kill + delete</button><span id="msg" class="err"></span></div>
 
 <fieldset style="margin-top:22px">
   <legend><b>4</b> output</legend>
@@ -218,11 +220,27 @@ $('clear').onclick = async () => {
   usage();
 };
 
+// kill + delete: stop the current job, wipe its files, reset the inputs
+$('kill').onclick = async () => {
+  if (!confirm('Kill the current job and delete everything it made (downloads, scratch files and its clips)?')) return;
+  $('kill').disabled = true; $('msg').textContent = '';
+  try {
+    const r = await fetch('/api/kill', { method: 'POST' });
+    const d = await r.json();
+    $('url').value = ''; setFile(null);
+    $('msg').className = 'dim'; $('msg').textContent = d.killed ? 'killed + wiped' : d.deleted ? 'wiped the last job' : 'nothing to kill';
+    setTimeout(() => { $('msg').textContent = ''; $('msg').className = 'err'; }, 3000);
+  } catch (e) { $('msg').textContent = 'kill failed'; }
+  finally { $('kill').disabled = false; poll(); usage(); }
+};
+
 // jobs
 function bar(p) { const n = Math.round(p / 5); return '[' + '#'.repeat(n) + '.'.repeat(20 - n) + '] ' + String(Math.round(p)).padStart(3) + '%'; }
 const els = {};
 function render(list) {
   const box = $('jobs');
+  const ids = new Set(list.map(j => j.id));
+  for (const k of Object.keys(els)) if (!ids.has(k)) { els[k].root.remove(); delete els[k]; }
   if (!list.length) { box.textContent = 'no jobs yet'; return; }
   if (box.classList.contains('dim')) { box.classList.remove('dim'); box.textContent = ''; }
   for (const j of list) {

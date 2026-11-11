@@ -1,5 +1,5 @@
 """Tiny local web UI: paste a link or drop a file -> 9:16 clip with blurred fill, captions and looping banner."""
-import json, re, shutil, subprocess, sys, threading, queue, time, uuid
+import json, re, shutil, signal, subprocess, sys, threading, queue, time, uuid
 from pathlib import Path
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
@@ -8,6 +8,8 @@ HERE = Path(__file__).resolve().parent
 BANNERS, OUTPUT, JOBS_DIR = HERE / "banners", HERE / "output", HERE / "jobs"
 for d in (BANNERS, OUTPUT, JOBS_DIR):
     d.mkdir(exist_ok=True)
+for _item in JOBS_DIR.iterdir():  # jobs live in memory only, so anything here is a leftover
+    shutil.rmtree(_item, ignore_errors=True) if _item.is_dir() else _item.unlink()
 import os, shutil as _sh
 ENV = {**os.environ, "PATH": "/opt/homebrew/bin:/usr/local/bin:" + os.environ.get("PATH", "")}  # lets yt-dlp find deno + ffmpeg
 
@@ -15,6 +17,17 @@ app = FastAPI()
 jobs: dict[str, dict] = {}
 order: list[str] = []
 q: "queue.Queue[str]" = queue.Queue()
+procs: dict[str, subprocess.Popen] = {}
+
+def _spawn(jid, cmd):
+    """Run a job step in its own process group so 'kill' also stops ffmpeg / yt-dlp / whisper children."""
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=ENV, start_new_session=True)
+    procs[jid] = p
+    return p
+
+def _killpg(p, sig):
+    try: os.killpg(os.getpgid(p.pid), sig)
+    except (ProcessLookupError, PermissionError): pass
 
 def _ffmpeg_dir() -> str:
     for d in (os.environ.get("FFMPEG_DIR"), str(HERE / "tools/bin")):
@@ -43,6 +56,22 @@ def log(job, line):
     if line:
         job["log"] = (job["log"] + [line])[-30:]
 
+def _save_meta(job):
+    """Keep finished jobs (titles, descriptions, clip files) across server restarts."""
+    meta = {k: v for k, v in job.items() if k not in ("opts", "log", "finished", "cancelled")}
+    (OUTPUT / f"{job['id']}.json").write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
+
+def _load_meta():
+    for f in sorted(OUTPUT.glob("*.json"), key=lambda p: p.stat().st_mtime):
+        try:
+            j = json.loads(f.read_text(encoding="utf-8"))
+            if all((OUTPUT / o["file"]).exists() for o in j["outputs"]):
+                jobs[j["id"]] = {**j, "log": [], "opts": {}}; order.insert(0, j["id"])
+            else:
+                f.unlink()
+        except Exception:
+            pass
+
 def run_job(jid):
     job = jobs[jid]; o = job["opts"]
     wd = JOBS_DIR / jid; wd.mkdir(exist_ok=True)
@@ -54,15 +83,15 @@ def run_job(jid):
         else:
             job["stage"], job["pct"] = "downloading", 0
             cmd = [sys.executable, "-m", "yt_dlp", "--no-playlist", "--newline", "--ffmpeg-location", _ffmpeg_dir(),
-                   "-f", "bv*[height<=1080]+ba/b", "--merge-output-format", "mp4",
-                   *(["--download-sections", f"*{int(o['start_sec'])}-{int(o['end_sec']) if o.get('end_sec') else 'inf'}"]
-                     if o.get("start_sec") or o.get("end_sec") else []),
+                   "-f", "bv*[height<=1080][vcodec^=avc1]+ba/bv*[height<=1080]+ba/b", "--merge-output-format", "mp4",
                    "-o", str(wd / "source.%(ext)s"), o["url"]]
-            p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=ENV)
+            p = _spawn(jid, cmd)
             for line in p.stdout:
+                if job.get("cancelled"): break
                 m = re.search(r"\[download\]\s+([\d.]+)%", line)
                 if m: job["pct"] = float(m.group(1))
                 else: log(job, line)
+            if job.get("cancelled"): raise RuntimeError("killed")
             if p.wait() != 0 or not src.exists():
                 raise RuntimeError("download failed")
         if o["mode"] == "clips":
@@ -70,28 +99,25 @@ def run_job(jid):
                    "--layout", o["layout"], "--whisper-model", o["model"], "--max-clips", str(o["max_clips"]),
                    "--min-len", str(o["min_len"]), "--max-len", str(o["max_len"]), "--desc-lang", o["desc_lang"],
                    "--captions" if o["captions"] else "--no-captions"]
-            if o.get("upload"):  # a downloaded URL is already trimmed to the range; an uploaded file is cut inside findclips
-                cmd += ["--offset", str(o.get("start_sec") or 0)]
-                if o.get("end_sec"): cmd += ["--limit-sec", str(o["end_sec"] - (o.get("start_sec") or 0))]
+            cmd += ["--offset", str(o.get("start_sec") or 0)]
+            if o.get("end_sec"): cmd += ["--limit-sec", str(o["end_sec"] - (o.get("start_sec") or 0))]
         else:
             cmd = [sys.executable, str(HERE / "compose.py"), str(src), str(BANNERS / o["banner"]), str(wd / "out.mp4"),
                    "--layout", o["layout"], "--whisper-model", o["model"],
                    "--captions" if o["captions"] else "--no-captions"]
         if o.get("language"): cmd += ["--language", o["language"]]
-        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=ENV)
+        p = _spawn(jid, cmd)
         dur = 0.0
         job["stage"], job["pct"] = "starting", 0
         for line in p.stdout:
+            if job.get("cancelled"): break
             line = line.strip()
             if line.startswith("DURATION "): dur = float(line.split()[1])
             elif line.startswith("STAGE "): job["stage"], job["pct"] = line[6:], 0
             elif line.startswith("PCT "): job["pct"] = float(line[4:])
             elif line.startswith("NOTE "): job["note"] = (job["note"] + "\n" + line[5:]).strip()
             elif line.startswith("CLIP "):
-                c = json.loads(line[5:])
-                if not o.get("upload"):  # show times as in the original video
-                    c["start"] = round(c["start"] + (o.get("start_sec") or 0), 1); c["end"] = round(c["end"] + (o.get("start_sec") or 0), 1)
-                final = f"{jid}_{len(job['outputs']) + 1}.mp4"
+                c = json.loads(line[5:]); final = f"{jid}_{len(job['outputs']) + 1}.mp4"
                 shutil.move(c["file"], OUTPUT / final)
                 job["outputs"].append({**c, "file": final})
             elif line.startswith("out_time_us=") and dur:
@@ -101,6 +127,7 @@ def run_job(jid):
                                                          "dup_frames", "drop_frames", "speed", "progress"):
                 pass
             elif not re.search(r"warn|tip:", line, re.I): log(job, line)
+        if job.get("cancelled"): raise RuntimeError("killed")
         if p.wait() != 0:
             raise RuntimeError("clip finder failed" if o["mode"] == "clips" else "render failed")
         if o["mode"] != "clips":
@@ -110,14 +137,24 @@ def run_job(jid):
             job["outputs"].append({"file": final, "title": "", "description": ""})
         if not job["outputs"]: raise RuntimeError("no clips produced")
         job.update(status="done", stage="done", pct=100)
+        _save_meta(job)
     except Exception as e:
         job.update(status="error", stage="error")
         log(job, f"error: {e}")
+    finally:
+        shutil.rmtree(wd, ignore_errors=True)  # never keep the downloaded source / audio / scratch files
+        procs.pop(jid, None)
+        job["finished"] = True
 
 def worker():
     while True:
-        run_job(q.get())
+        jid = q.get()
+        job = jobs.get(jid)
+        if job is None or job.get("cancelled"):   # killed while still waiting in the queue
+            continue
+        run_job(jid)
 
+_load_meta()
 threading.Thread(target=worker, daemon=True).start()
 
 @app.get("/", response_class=HTMLResponse)
@@ -197,3 +234,33 @@ def clear_all():
             shutil.rmtree(item) if item.is_dir() else item.unlink()
     jobs.clear(); order.clear()
     return {"freed": freed}
+
+
+def _kill_job(jid):
+    """Stop the job's processes, then delete everything it produced (scratch files and finished clips)."""
+    job = jobs.get(jid)
+    if not job: return
+    job["cancelled"] = True
+    p = procs.get(jid)
+    if p and p.poll() is None: _killpg(p, signal.SIGTERM)
+    if job["status"] == "running":
+        for _ in range(80):                    # give the worker thread up to 8 s to clean up
+            if job.get("finished"): break
+            time.sleep(0.1)
+        if p and p.poll() is None: _killpg(p, signal.SIGKILL)
+    for o in job["outputs"]:
+        (OUTPUT / o["file"]).unlink(missing_ok=True)
+    (OUTPUT / f"{jid}.json").unlink(missing_ok=True)
+    shutil.rmtree(JOBS_DIR / jid, ignore_errors=True)
+    jobs.pop(jid, None)
+    if jid in order: order.remove(jid)
+
+@app.post("/api/kill")
+def kill_current():
+    """Full reset for the current video: kill the running/queued job(s) and wipe their files.
+    With nothing active, wipes the most recent job instead. Banners and older jobs are untouched."""
+    active = [j for j in order if jobs[j]["status"] in ("queued", "running")]
+    targets = active or order[:1]
+    for jid in list(targets):
+        _kill_job(jid)
+    return {"killed": len(active), "deleted": len(targets) - len(active)}

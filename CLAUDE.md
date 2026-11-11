@@ -23,14 +23,19 @@ looping banner overlay). Jobs run one at a time in a worker thread; state is in 
 Frame 1080x1920. Banner width = 65 % of frame, bottom edge 280 px above the bottom (clears TikTok UI), video block centred at y=720,
 captions bottom at `banner_y - 40`. Change via `compose.py` flags `--banner-scale --banner-bottom --video-center-y`.
 
+## Disk hygiene
+`run_job` deletes `jobs/<id>/` in a `finally` block (full downloaded video, audio.wav, words.json); only finished clips remain in `output/`.
+`jobs/` is also wiped on server start. Never keep full-length sources around.
+
 ## Don't commit
 `banners/*.mp4`, `output/`, `jobs/`, `samples/`, `tools/`, `.venv/` (see `.gitignore`). Banners are the user's own branded assets.
 
 ## Find-clips pipeline (`findclips.py`)
 ffmpeg audio extract (optionally a `--offset`/`--limit-sec` range) -> faster-whisper words (`words.json`) -> sentences -> `llm.pick_clips` (one Claude call, tool
 `submit_clips`: sentence-id ranges + title + description) -> validate length/overlap -> `compose.py --start --end --words-json` per clip.
-Subprocess protocol on stdout: `STAGE x`, `PCT n`, `NOTE text`, `CLIP {json}` (parsed by `app.py`). `yt-dlp --download-sections "*FROM-TO"`
-fetches only that range (the downloaded file then starts at 0; `app.py` adds the offset back for display; for uploaded files `findclips` cuts the range itself and keeps source timestamps). Gotcha: current Claude models reject forced `tool_choice`, `temperature` and assistant prefill - use plain tool calls.
+Subprocess protocol on stdout: `STAGE x`, `PCT n`, `NOTE text`, `CLIP {json}` (parsed by `app.py`). the whole video is downloaded with
+yt-dlp's native downloader (fast, ~250 MB/hour at 1080p) and `findclips --offset/--limit-sec` cuts the from/to range locally, keeping source timestamps.
+**Do not use `yt-dlp --download-sections`**: it routes through ffmpeg and crawled at ~0.14x realtime (a 20 min range never finished). Gotcha: current Claude models reject forced `tool_choice`, `temperature` and assistant prefill - use plain tool calls.
 
 ## Ideas / next
 Descriptions for whole-video mode, safe-zone preview in the UI, face-tracking crop for podcasts (see AutoClip).
