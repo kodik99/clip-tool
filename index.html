@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>clip</title>
+<style>
+  :root {
+    --bg: #0c0c0c; --fg: #cfcfcf; --dim: #6b6b6b; --acc: #b6ff3c; --err: #ff5f56; --line: #262626;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg: #f4f4ef; --fg: #1c1c1c; --dim: #8a8a82; --acc: #2a6b00; --err: #c0281c; --line: #d6d6cc; }
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--bg); }
+  body {
+    margin: 0 auto; max-width: 760px; padding: 28px 16px 80px;
+    background: var(--bg); color: var(--fg);
+    font: 14px/1.55 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  h1 { font-size: 14px; font-weight: normal; margin: 0 0 18px; color: var(--acc); }
+  .dim { color: var(--dim); }
+  .row { display: flex; gap: 10px; align-items: baseline; margin: 7px 0; flex-wrap: wrap; }
+  .row > label:first-child { width: 78px; color: var(--dim); flex: none; }
+  input[type=text], select {
+    background: transparent; color: var(--fg); border: 0; border-bottom: 1px solid var(--line);
+    font: inherit; padding: 2px 4px; border-radius: 0; outline: none;
+  }
+  input[type=text] { flex: 1; min-width: 200px; }
+  input[type=text]:focus, select:focus { border-bottom-color: var(--acc); }
+  select option { background: var(--bg); color: var(--fg); }
+  label.opt { cursor: pointer; margin-right: 8px; }
+  input[type=radio], input[type=checkbox] { accent-color: var(--acc); }
+  button, .btn {
+    background: transparent; color: var(--fg); border: 1px solid var(--line); font: inherit;
+    padding: 2px 10px; cursor: pointer; border-radius: 0;
+  }
+  button:hover, .btn:hover { border-color: var(--acc); color: var(--acc); }
+  button.go { color: var(--acc); border-color: var(--acc); margin-top: 10px; }
+  button:disabled { opacity: .4; cursor: default; }
+  #drop { border: 1px dashed var(--line); padding: 8px 12px; color: var(--dim); cursor: pointer; flex: 1; min-width: 200px; }
+  #drop.over { border-color: var(--acc); color: var(--acc); }
+  #drop.has { color: var(--fg); border-style: solid; }
+  hr { border: 0; border-top: 1px solid var(--line); margin: 26px 0 14px; }
+  .job { margin: 0 0 18px; }
+  .job .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bar { color: var(--acc); white-space: pre; }
+  .err { color: var(--err); }
+  .log { color: var(--dim); font-size: 12px; white-space: pre-wrap; word-break: break-all; }
+  video { display: block; margin: 8px 0 4px; height: 340px; max-width: 100%; background: #000; }
+  a { color: var(--acc); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  input[type=file] { display: none; }
+</style>
+</head>
+<body>
+<h1>$ clip <span class="dim">— link or file in, 9:16 + banner + captions out</span></h1>
+
+<div class="row">
+  <label>source</label>
+  <input type="text" id="url" placeholder="paste youtube / video link" autocomplete="off" spellcheck="false">
+  <span class="dim">or</span>
+  <div id="drop">drop / click to pick a file</div>
+  <input type="file" id="file" accept="video/*">
+</div>
+
+<div class="row">
+  <label>banner</label>
+  <select id="banner"></select>
+  <button id="addb" type="button">+ upload</button>
+  <input type="file" id="bfile" accept="video/mp4">
+</div>
+
+<div class="row">
+  <label>layout</label>
+  <label class="opt"><input type="radio" name="layout" value="blur" checked> blur-fill</label>
+  <label class="opt"><input type="radio" name="layout" value="crop"> crop</label>
+  <label class="opt"><input type="radio" name="layout" value="fit"> fit</label>
+</div>
+
+<div class="row">
+  <label>captions</label>
+  <label class="opt"><input type="checkbox" id="caps" checked> on</label>
+  <select id="model">
+    <option value="tiny">tiny</option><option value="base">base</option>
+    <option value="small" selected>small</option><option value="medium">medium</option>
+  </select>
+  <input type="text" id="lang" placeholder="lang (auto)" style="flex:none;min-width:0;width:100px" maxlength="5">
+</div>
+
+<div class="row"><span style="width:78px"></span><button class="go" id="run">run &gt;</button><span id="msg" class="err"></span></div>
+<div class="dim" style="margin-top:14px">whole-video mode. long videos: highlight finder is off (needs an api key).</div>
+
+<hr>
+<div class="row" style="margin-top:0"><span class="dim">jobs</span><button id="clear" type="button">clear all</button><span id="usage" class="dim"></span></div>
+<div id="jobs" class="dim">no jobs yet</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let picked = null;
+
+async function loadBanners(sel) {
+  const list = await (await fetch('/api/banners')).json();
+  $('banner').innerHTML = '';
+  for (const b of list) { const o = document.createElement('option'); o.value = o.textContent = b; $('banner').appendChild(o); }
+  if (sel) $('banner').value = sel;
+}
+
+// file pick / drop
+const drop = $('drop');
+function setFile(f) {
+  picked = f;
+  drop.textContent = f ? f.name : 'drop / click to pick a file';
+  drop.classList.toggle('has', !!f);
+  if (f) $('url').value = '';
+}
+drop.onclick = () => $('file').click();
+$('file').onchange = e => setFile(e.target.files[0] || null);
+['dragenter', 'dragover'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave', 'drop'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', e => { if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]); });
+$('url').oninput = () => { if ($('url').value) setFile(null); };
+
+// banner upload
+$('addb').onclick = () => $('bfile').click();
+$('bfile').onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  const fd = new FormData(); fd.append('file', f);
+  const r = await fetch('/api/banners', { method: 'POST', body: fd });
+  if (r.ok) loadBanners((await r.json()).name); else $('msg').textContent = 'banner upload failed';
+  e.target.value = '';
+};
+
+// run
+$('run').onclick = async () => {
+  $('msg').textContent = '';
+  const url = $('url').value.trim();
+  if (!url && !picked) { $('msg').textContent = 'need a link or a file'; return; }
+  if (!$('banner').value) { $('msg').textContent = 'need a banner'; return; }
+  const fd = new FormData();
+  fd.append('url', url);
+  if (picked) fd.append('file', picked);
+  fd.append('banner', $('banner').value);
+  fd.append('layout', document.querySelector('input[name=layout]:checked').value);
+  fd.append('captions', $('caps').checked ? 'true' : 'false');
+  fd.append('model', $('model').value);
+  fd.append('language', $('lang').value);
+  $('run').disabled = true;
+  try {
+    const r = await fetch('/api/jobs', { method: 'POST', body: fd });
+    if (!r.ok) { $('msg').textContent = (await r.json()).detail || 'failed'; }
+    else { $('url').value = ''; setFile(null); poll(); }
+  } finally { $('run').disabled = false; }
+};
+
+// clear all
+function fmt(b) { return b > 1e9 ? (b / 1e9).toFixed(1) + ' GB' : b > 1e6 ? (b / 1e6).toFixed(0) + ' MB' : Math.max(1, Math.round(b / 1e3)) + ' KB'; }
+async function usage() {
+  try { const u = await (await fetch('/api/usage')).json(); $('usage').textContent = u.bytes ? fmt(u.bytes) + ' on disk' : 'nothing stored'; } catch (e) {}
+}
+$('clear').onclick = async () => {
+  if (!confirm('Delete ALL generated videos and working files?\nBanners are kept. Download anything you want first.')) return;
+  const r = await fetch('/api/jobs', { method: 'DELETE' });
+  if (r.status === 409) { $('msg').textContent = 'wait for the running job to finish'; return; }
+  const d = await r.json();
+  for (const k of Object.keys(els)) { els[k].root.remove(); delete els[k]; }
+  $('jobs').className = 'dim'; $('jobs').textContent = 'cleared ' + fmt(d.freed);
+  usage();
+};
+
+// jobs
+function bar(p) { const n = Math.round(p / 5); return '[' + '#'.repeat(n) + '.'.repeat(20 - n) + '] ' + String(Math.round(p)).padStart(3) + '%'; }
+const els = {};
+function render(list) {
+  const box = $('jobs');
+  if (!list.length) { box.textContent = 'no jobs yet'; return; }
+  if (box.classList.contains('dim')) { box.classList.remove('dim'); box.textContent = ''; }
+  for (const j of list) {
+    let e = els[j.id];
+    if (!e) {
+      e = els[j.id] = { root: document.createElement('div') };
+      e.root.className = 'job';
+      e.t = document.createElement('div'); e.t.className = 't';
+      e.s = document.createElement('div');
+      e.l = document.createElement('div'); e.l.className = 'log';
+      e.v = document.createElement('div');
+      e.root.append(e.t, e.s, e.l, e.v);
+      box.appendChild(e.root);
+    }
+    e.t.textContent = '> ' + j.title;
+    if (j.status === 'done') {
+      e.s.className = 'bar'; e.s.textContent = bar(100) + ' done';
+      if (!e.v.firstChild) {
+        const v = document.createElement('video'); v.controls = true; v.src = '/out/' + j.output; v.preload = 'metadata';
+        const a = document.createElement('a'); a.href = '/out/' + j.output + '?dl=1'; a.textContent = 'download ' + j.output;
+        e.v.append(v, a);
+      }
+      e.l.textContent = '';
+    } else if (j.status === 'error') {
+      e.s.className = 'err'; e.s.textContent = 'failed';
+      e.l.textContent = j.log.slice(-6).join('\n');
+    } else {
+      e.s.className = 'bar'; e.s.textContent = bar(j.pct) + ' ' + j.stage;
+      e.l.textContent = '';
+    }
+  }
+  // keep newest first
+  for (const j of [...list].reverse()) box.prepend(els[j.id].root);
+}
+let timer = null;
+async function poll() {
+  clearTimeout(timer);
+  let list = [];
+  try { list = await (await fetch('/api/jobs')).json(); render(list); usage(); } catch (e) {}
+  const busy = list.some(j => j.status === 'queued' || j.status === 'running');
+  timer = setTimeout(poll, busy ? 1000 : 4000);
+}
+loadBanners(); poll();
+</script>
+</body>
+</html>

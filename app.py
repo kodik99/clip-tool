@@ -1,0 +1,157 @@
+"""Tiny local web UI: paste a link or drop a file -> 9:16 clip with blurred fill, captions and looping banner."""
+import re, shutil, subprocess, sys, threading, queue, time, uuid
+from pathlib import Path
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse
+
+HERE = Path(__file__).resolve().parent
+BANNERS, OUTPUT, JOBS_DIR = HERE / "banners", HERE / "output", HERE / "jobs"
+for d in (BANNERS, OUTPUT, JOBS_DIR):
+    d.mkdir(exist_ok=True)
+import os, shutil as _sh
+ENV = {**os.environ, "PATH": "/opt/homebrew/bin:/usr/local/bin:" + os.environ.get("PATH", "")}  # lets yt-dlp find deno + ffmpeg
+
+app = FastAPI()
+jobs: dict[str, dict] = {}
+order: list[str] = []
+q: "queue.Queue[str]" = queue.Queue()
+
+def _ffmpeg_dir() -> str:
+    for d in (os.environ.get("FFMPEG_DIR"), str(HERE / "tools/bin")):
+        if d and (Path(d) / "ffmpeg").exists():
+            return d
+    found = _sh.which("ffmpeg", path=ENV["PATH"])
+    return str(Path(found).parent) if found else ""
+
+def safe_name(name: str) -> str:
+    name = Path(name).name
+    return re.sub(r"[^\w.\- ]", "_", name) or "file"
+
+def log(job, line):
+    line = line.rstrip()
+    if line:
+        job["log"] = (job["log"] + [line])[-30:]
+
+def run_job(jid):
+    job = jobs[jid]; o = job["opts"]
+    wd = JOBS_DIR / jid; wd.mkdir(exist_ok=True)
+    job["status"] = "running"
+    try:
+        src = wd / "source.mp4"
+        if o.get("upload"):
+            src = Path(o["upload"])
+        else:
+            job["stage"], job["pct"] = "downloading", 0
+            cmd = [sys.executable, "-m", "yt_dlp", "--no-playlist", "--newline", "--ffmpeg-location", _ffmpeg_dir(),
+                   "-f", "bv*[height<=1080]+ba/b", "--merge-output-format", "mp4",
+                   "-o", str(wd / "source.%(ext)s"), o["url"]]
+            p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=ENV)
+            for line in p.stdout:
+                m = re.search(r"\[download\]\s+([\d.]+)%", line)
+                if m: job["pct"] = float(m.group(1))
+                else: log(job, line)
+            if p.wait() != 0 or not src.exists():
+                raise RuntimeError("download failed")
+        out = wd / "out.mp4"
+        cmd = [sys.executable, str(HERE / "compose.py"), str(src), str(BANNERS / o["banner"]), str(out),
+               "--layout", o["layout"], "--whisper-model", o["model"]]
+        cmd.append("--captions" if o["captions"] else "--no-captions")
+        if o.get("language"): cmd += ["--language", o["language"]]
+        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        dur = 0.0
+        job["stage"], job["pct"] = "starting", 0
+        for line in p.stdout:
+            line = line.strip()
+            if line.startswith("DURATION "): dur = float(line.split()[1])
+            elif line.startswith("STAGE "): job["stage"], job["pct"] = line[6:], 0
+            elif line.startswith("out_time_us=") and dur:
+                try: job["pct"] = min(99.0, int(line.split("=")[1]) / 1e6 / dur * 100)
+                except ValueError: pass
+            elif "=" in line and line.split("=")[0] in ("frame", "fps", "stream_0_0_q", "bitrate", "total_size", "out_time", "out_time_ms",
+                                                         "dup_frames", "drop_frames", "speed", "progress"):
+                pass
+            elif not re.search(r"warn|tip:", line, re.I): log(job, line)
+        if p.wait() != 0 or not out.exists():
+            raise RuntimeError("render failed")
+        final = f"{jid}.mp4"
+        shutil.move(str(out), OUTPUT / final)
+        job.update(status="done", stage="done", pct=100, output=final)
+    except Exception as e:
+        job.update(status="error", stage="error")
+        log(job, f"error: {e}")
+
+def worker():
+    while True:
+        run_job(q.get())
+
+threading.Thread(target=worker, daemon=True).start()
+
+@app.get("/", response_class=HTMLResponse)
+def index():
+    return (HERE / "index.html").read_text(encoding="utf-8")
+
+@app.get("/api/banners")
+def banners():
+    return sorted(p.name for p in BANNERS.glob("*.mp4"))
+
+@app.post("/api/banners")
+async def upload_banner(file: UploadFile = File(...)):
+    name = safe_name(file.filename or "banner.mp4")
+    if not name.lower().endswith(".mp4"):
+        raise HTTPException(400, "banner must be .mp4")
+    with open(BANNERS / name, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+    return {"name": name}
+
+@app.post("/api/jobs")
+async def create_job(url: str = Form(""), banner: str = Form(...), layout: str = Form("blur"),
+                     captions: bool = Form(True), model: str = Form("small"), language: str = Form(""),
+                     file: UploadFile | None = File(None)):
+    if layout not in ("blur", "crop", "fit"): raise HTTPException(400, "bad layout")
+    if model not in ("tiny", "base", "small", "medium"): raise HTTPException(400, "bad model")
+    if not (BANNERS / Path(banner).name).exists(): raise HTTPException(400, "banner not found")
+    jid = uuid.uuid4().hex[:8]
+    opts = dict(banner=Path(banner).name, layout=layout, captions=captions, model=model, language=language.strip())
+    if file is not None and file.filename:
+        wd = JOBS_DIR / jid; wd.mkdir(exist_ok=True)
+        dest = wd / safe_name(file.filename)
+        with open(dest, "wb") as f: shutil.copyfileobj(file.file, f)
+        opts["upload"] = str(dest); title = file.filename
+    elif url.strip().startswith(("http://", "https://")):
+        opts["url"] = url.strip(); title = url.strip()
+    else:
+        raise HTTPException(400, "give a http(s) link or a file")
+    jobs[jid] = dict(id=jid, title=title, status="queued", stage="queued", pct=0, log=[], output=None, opts=opts, t=time.time())
+    order.insert(0, jid); q.put(jid)
+    return {"id": jid}
+
+@app.get("/api/jobs")
+def list_jobs():
+    return [{k: v for k, v in jobs[j].items() if k != "opts"} for j in order]
+
+@app.get("/out/{name}")
+def out(name: str, dl: int = 0):
+    p = OUTPUT / Path(name).name
+    if not p.exists(): raise HTTPException(404)
+    return FileResponse(p, media_type="video/mp4", filename=p.name if dl else None)
+
+
+def _dir_size(d: Path) -> int:
+    return sum(f.stat().st_size for f in d.rglob("*") if f.is_file())
+
+@app.get("/api/usage")
+def usage():
+    return {"bytes": _dir_size(OUTPUT) + _dir_size(JOBS_DIR)}
+
+@app.delete("/api/jobs")
+def clear_all():
+    """Delete every finished video and every working file. Banners are never touched."""
+    if any(j["status"] in ("queued", "running") for j in jobs.values()):
+        raise HTTPException(409, "a job is still running")
+    freed = 0
+    for d in (OUTPUT, JOBS_DIR):
+        freed += _dir_size(d)
+        for item in d.iterdir():
+            shutil.rmtree(item) if item.is_dir() else item.unlink()
+    jobs.clear(); order.clear()
+    return {"freed": freed}
