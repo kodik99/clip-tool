@@ -33,6 +33,12 @@ Linux: `sudo apt install ffmpeg`.
 2. Paste a link or drop a file, pick layout + captions, press **run**.
 3. Download the result. **clear all** deletes every generated video and working file (banners are kept).
 
+**Layouts:** *blur-fill* shows the whole video over a blurred copy of itself (nothing is cropped); *crop* zooms in to fill the
+screen and cuts off the sides; *fit* shows the whole video with plain black bars above and below.
+**Crop corrector** (shown for *crop*): instead of always cropping the dead centre, it finds faces and picks one fixed,
+face-safe crop position per camera shot (no panning). With two people it keeps one fully in frame. Shots where no face is
+found fall back to a centre crop. First use downloads a 0.2 MB MediaPipe face model into `models/`.
+
 Defaults (in `compose.py` flags): banner 65 % of frame width, bottom edge 280 px above the frame bottom,
 video block centred at y = 720 px of 1920, captions just above the banner. First run downloads the Whisper `small` model.
 

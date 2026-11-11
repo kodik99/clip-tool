@@ -99,6 +99,12 @@
     <label class="opt"><input type="radio" name="layout" value="crop"> crop</label>
     <label class="opt"><input type="radio" name="layout" value="fit"> fit</label>
   </div>
+  <div class="row" id="cropfix" style="display:none">
+    <label></label>
+    <label class="opt"><input type="checkbox" id="cfix" checked> crop corrector</label>
+    <span class="dim small">picks a face-safe crop per shot; with 2 people it keeps one</span>
+  </div>
+  <div class="row"><label></label><span class="dim small" id="layouthint">blur-fill: whole video, blurred copy behind it</span></div>
   <div class="row">
     <label>captions</label>
     <label class="opt"><input type="checkbox" id="caps" checked> on</label>
@@ -168,6 +174,13 @@ $('bfile').onchange = async e => {
   e.target.value = '';
 };
 
+// layout hints + crop corrector toggle
+const HINTS = { blur: 'blur-fill: whole video, blurred copy behind it', crop: 'crop: zooms in to fill the screen, the sides are cut off', fit: 'fit: whole video, plain black bars above and below' };
+document.querySelectorAll('input[name=layout]').forEach(r => r.onchange = () => {
+  const v = document.querySelector('input[name=layout]:checked').value;
+  $('layouthint').textContent = HINTS[v]; $('cropfix').style.display = v === 'crop' ? '' : 'none';
+});
+
 // mode toggle
 document.querySelectorAll('input[name=mode]').forEach(r => r.onchange = () => {
   const clips = document.querySelector('input[name=mode]:checked').value === 'clips';
@@ -186,6 +199,7 @@ $('run').onclick = async () => {
   fd.append('banner', $('banner').value);
   fd.append('layout', document.querySelector('input[name=layout]:checked').value);
   fd.append('captions', $('caps').checked ? 'true' : 'false');
+  fd.append('crop_fix', $('cfix').checked ? 'true' : 'false');
   fd.append('model', $('model').value);
   fd.append('language', $('lang').value);
   const mode = document.querySelector('input[name=mode]:checked').value;

@@ -6,3 +6,5 @@ av>=14,<17          # PyAV 17+ breaks faster-whisper (open() metadata_errors)
 yt-dlp[default]     # [default] pulls in yt-dlp-ejs, the YouTube challenge solver
 anthropic>=0.40   # clip picking + descriptions (find-clips mode only)
 keyring>=24        # reads your API key from the OS keychain
+numpy>=1.26
+mediapipe>=0.10    # crop corrector (face detection); needs Python 3.10-3.12 wheels

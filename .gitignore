@@ -8,3 +8,4 @@ banners/*.mp4
 !banners/.gitkeep
 *.ass
 .DS_Store
+models/

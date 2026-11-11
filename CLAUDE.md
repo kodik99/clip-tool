@@ -23,6 +23,13 @@ looping banner overlay). Jobs run one at a time in a worker thread; state is in 
 Frame 1080x1920. Banner width = 65 % of frame, bottom edge 280 px above the bottom (clears TikTok UI), video block centred at y=720,
 captions bottom at `banner_y - 40`. Change via `compose.py` flags `--banner-scale --banner-bottom --video-center-y`.
 
+## Crop corrector (`reframe.py`)
+`compose.py --layout crop --crop-fix`: ffmpeg scene detection -> shots; faces sampled at <=2 fps with MediaPipe BlazeFace
+(model auto-downloaded to `models/`, git-ignored) -> per shot, cluster faces, keep the most prominent one, choose crop x so it is
+fully inside and no second face is half-cut -> piecewise-constant `crop=...:x='if(lt(t,..),..)'` expression. No panning, no
+face-following. OpenCV 5 ships no Haar cascades, so don't rely on cv2 for detection. Masked / profile / tiny faces may be missed
+(centre crop fallback).
+
 ## Disk hygiene
 `run_job` deletes `jobs/<id>/` in a `finally` block (full downloaded video, audio.wav, words.json); only finished clips remain in `output/`.
 `jobs/` is also wiped on server start. Never keep full-length sources around.

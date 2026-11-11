@@ -32,12 +32,15 @@ def probe_duration(path):
                                    "-of", "csv=p=0", path], text=True).strip()
     return float(out)
 
-def build_filter(layout, bw, banner_y, video_cy, ass=None):
+def build_filter(layout, bw, banner_y, video_cy, ass=None, crop=None):
     if layout == "blur":
         main = (f"[0:v]split[a][b];"
                 f"[a]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},boxblur=40:6[bg];"
                 f"[b]scale={W}:{H}:force_original_aspect_ratio=decrease[fg];"
                 f"[bg][fg]overlay=(W-w)/2:{video_cy}-h/2[base]")
+    elif layout == "crop" and crop:     # crop corrector: fixed, face-safe crop position per shot
+        import reframe
+        main = f"[0:v]crop={crop['cw']}:{crop['ch']}:x='{reframe.x_expr(crop['segs'])}':y=0,scale={W}:{H}[base]"
     elif layout == "crop":
         main = f"[0:v]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H}[base]"
     else:
@@ -62,6 +65,8 @@ def main():
     p.add_argument("--language", default=None)
     p.add_argument("--start", type=float, default=None, help="cut: start second in the input")
     p.add_argument("--end", type=float, default=None, help="cut: end second in the input")
+    p.add_argument("--crop-fix", action=argparse.BooleanOptionalAction, default=False,
+                   help="crop layout only: pick a face-safe crop position per shot")
     p.add_argument("--words-json", default=None, help="reuse an existing transcript instead of running Whisper")
     a = p.parse_args()
 
@@ -73,6 +78,16 @@ def main():
     cut = a.start is not None and a.end is not None
     dur = (a.end - a.start) if cut else probe_duration(a.input)
     print(f"DURATION {dur}", flush=True)
+    crop = None
+    if a.layout == "crop" and a.crop_fix:
+        import reframe
+        print("STAGE checking framing", flush=True)
+        sw_, sh_ = probe_size(a.input)
+        try:
+            crop = reframe.plan(FFMPEG, a.input, a.start if cut else 0.0, dur, sw_, sh_)
+            if crop: print(f"NOTE crop corrector: {crop['shots']} shot(s), faces found in {crop['with_faces']}", flush=True)
+        except Exception as e:      # never fail the render because of framing; fall back to a centre crop
+            print(f"NOTE crop corrector skipped ({e})", flush=True)
     if a.captions:
         import captions
         if a.words_json:
@@ -92,7 +107,7 @@ def main():
     cmd = [FFMPEG, "-y", "-hide_banner", "-loglevel", "error", "-progress", "pipe:1", "-nostats",
            *(["-ss", f"{a.start:.3f}", "-t", f"{dur:.3f}"] if cut else []),
            "-i", a.input, "-stream_loop", "-1", "-i", a.banner,
-           "-filter_complex", build_filter(a.layout, bw, banner_y, a.video_center_y, ass),
+           "-filter_complex", build_filter(a.layout, bw, banner_y, a.video_center_y, ass, crop),
            "-map", "[v]", "-map", "0:a?", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
            "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k", "-shortest", "-movflags", "+faststart", a.output]
     sys.exit(subprocess.run(cmd).returncode)
